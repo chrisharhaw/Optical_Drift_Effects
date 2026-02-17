@@ -57,8 +57,8 @@ function deflection(lens::SIS, θ::SVector{2,Float64})::SVector{2,Float64}
     d = centered(lens, θ)
     x = d[1]; y = d[2]
     r = hypot(x, y) + lens.eps_r
-    α = (lens.θE / r) .* d
-    return α
+    a = (lens.θE / r) .* d
+    return a
 end
 
 """

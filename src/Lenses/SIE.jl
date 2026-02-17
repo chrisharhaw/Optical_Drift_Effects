@@ -98,9 +98,9 @@ function deflection(lens::SIE, θ::SVector{2,Float64})::SVector{2,Float64}
     # If nearly circular, use SIS limit (robust)
     if abs(1.0 - q) < lens.eps_q
         r = hypot(x, y) + lens.eps_r
-        αx = b * x / r
-        αy = b * y / r
-        return from_lens_frame(lens, @SVector [αx, αy])
+        ax = b * x / r
+        ay = b * y / r
+        return from_lens_frame(lens, @SVector [ax, ay])
     end
 
     # Ellipticity parameter
@@ -119,10 +119,10 @@ function deflection(lens::SIE, θ::SVector{2,Float64})::SVector{2,Float64}
     #
     denom = ψ + q
 
-    αx = (b / e) * atan( (e * x) / denom )
-    αy = (b / e) * atanh( (e * y) / denom )
+    ax = (b / e) * atan( (e * x) / denom )
+    ay = (b / e) * atanh( (e * y) / denom )
 
-    return from_lens_frame(lens, @SVector [αx, αy])
+    return from_lens_frame(lens, @SVector [ax, ay])
 end
 
 # --- Jacobian via AD ---------------------------------------------------------
@@ -138,8 +138,8 @@ function deflection_jacobian(lens::SIE, θ::SVector{2,Float64})::SMatrix{2,2,Flo
     # ForwardDiff works most smoothly with ordinary vectors.
     f(v) = begin
         θv = @SVector [v[1], v[2]]
-        α  = deflection(lens, θv)
-        return SVector{2,Float64}(α[1], α[2])
+        a  = deflection(lens, θv)
+        return SVector{2,Float64}(a[1], a[2])
     end
 
     J = ForwardDiff.jacobian(f, Vector{Float64}([θ[1], θ[2]]))  # 2x2 Matrix
