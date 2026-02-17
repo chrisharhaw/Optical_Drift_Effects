@@ -1,0 +1,15 @@
+name = "Optical_Drift_Effects"
+uuid = "52dcf817-01fa-4c27-b0ac-529e854531ff"
+version = "0.1.0"
+authors = ["Christopher Harvey-Hawes"]
+
+[deps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+
+[compat]
+julia = "1.12"
+ForwardDiff = "0.10"
+StaticArrays = "1"
