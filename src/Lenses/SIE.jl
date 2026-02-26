@@ -122,8 +122,14 @@ function deflection(lens::SIE, θ::SVector{2,Float64})::SVector{2,Float64}
     ax = (b / e) * atan( (e * x) / denom )
     ay = (b / e) * atanh( (e * y) / denom )
 
+    #This equation for the deflection angle is different to the one from Petters, Levine, Wambsganss (2001) 
+    #need to investigate further by comparison to Lenstronomy and K+K94. 
     return from_lens_frame(lens, @SVector [ax, ay])
 end
+
+# --- Lensing Potential ---------------------------------------------------------
+
+
 
 # --- Jacobian via AD ---------------------------------------------------------
 
