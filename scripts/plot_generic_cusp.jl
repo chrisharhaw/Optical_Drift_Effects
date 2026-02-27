@@ -141,9 +141,9 @@ end
 # -----------------------------
 # Display / save
 # -----------------------------
-plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
-savefig("generic_cusp_fields.png")
-println("Saved: generic_cusp_fields.png")
+# plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
+# savefig("generic_cusp_fields.png")
+# println("Saved: generic_cusp_fields.png")
 
 
 
@@ -195,8 +195,8 @@ p_mult = contourf(
 for poly in caustic_polylines
     plot!(p_mult, first.(poly), last.(poly), lw=3)
 end
-savefig(p_mult, "generic_cusp_multiplicity.png")
-println("Saved: generic_cusp_multiplicity.png")
+# savefig(p_mult, "generic_cusp_multiplicity.png")
+# println("Saved: generic_cusp_multiplicity.png")
 
 # --------------------------------------------
 # Image positions for a specific source position β
@@ -253,7 +253,7 @@ end
 
 
 # ---------------------------------------------
-# Plot overlay figure
+# Plot overlay figure - Point sources
 # ---------------------------------------------
 
 # Choose some source positions to test image configurations
@@ -327,7 +327,119 @@ scatter!(p_src, first.(sources), last.(sources);
 
 # Combine and save
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
-display(p_overlay)
 
-savefig(p_overlay, "generic_cusp_overlay.png")
-println("Saved: generic_cusp_overlay.png")
+# display(p_overlay)
+# savefig(p_overlay, "generic_cusp_overlay.png")
+# println("Saved: generic_cusp_overlay.png")
+
+# ---------------------------------------------
+# Overlay figure - Extended sources
+# ---------------------------------------------
+
+# Source circle parameters
+β0 = SVector{2,Float64}(-1.0, 0.3)   # center in source plane (edit)
+Rs = 0.15                             # source radius (edit)
+Nϕ = 200                              # boundary sampling
+
+ϕs = range(0, 2π; length=Nϕ+1)[1:end-1]
+source_boundary = [SVector{2,Float64}(β0[1] + Rs*cos(ϕ), β0[2] + Rs*sin(ϕ)) for ϕ in ϕs]
+
+function track_image_branches(lens, boundary::Vector{SVector{2,Float64}}; max_branches=3)
+    # branches[b] is a Vector{SVector{2}} curve in lens plane
+    branches = [SVector{2,Float64}[] for _ in 1:max_branches]
+
+    # initialize
+    imgs0 = image_positions(lens, boundary[1])
+    imgs0 = sort(imgs0; by = p -> p[2])  # sort by y for stable ordering
+    for b in 1:min(length(imgs0), max_branches)
+        push!(branches[b], imgs0[b])
+    end
+    active = min(length(imgs0), max_branches)
+
+    prev = imgs0
+
+    # walk around boundary
+    for n in 2:length(boundary)
+        imgs = image_positions(lens, boundary[n])
+
+        # if image count changes, the simple tracker will struggle.
+        # For now, we’ll just handle the common case: count stays same.
+        if length(imgs) != length(prev)
+            # break continuity: push NaN separators into all branches
+            for b in 1:max_branches
+                push!(branches[b], SVector{2,Float64}(NaN, NaN))
+            end
+            prev = imgs
+            continue
+        end
+
+        # greedy nearest-neighbor matching between prev and imgs
+        used = falses(length(imgs))
+        new_order = Vector{SVector{2,Float64}}(undef, length(imgs))
+
+        for i in 1:length(prev)
+            # find closest unused img to prev[i]
+            best_j = 0
+            best_d = Inf
+            for j in 1:length(imgs)
+                used[j] && continue
+                d = sum((imgs[j] .- prev[i]).^2)
+                if d < best_d
+                    best_d = d
+                    best_j = j
+                end
+            end
+            used[best_j] = true
+            new_order[i] = imgs[best_j]
+        end
+
+        # append to branches
+        active = min(length(new_order), max_branches)
+        for b in 1:active
+            push!(branches[b], new_order[b])
+        end
+        prev = new_order
+    end
+
+    return branches
+end
+
+image_branches = track_image_branches(lens, source_boundary)
+
+pal_img = palette(:tab10, 3)
+
+# Lens plane panel
+p_lens_ext = plot(; aspect_ratio=:equal,
+    title="Lens plane: critical curve + extended images",
+    xlabel="θx", ylabel="θy",
+    legend=false
+)
+
+for poly in critical_polylines
+    plot!(p_lens_ext, first.(poly), last.(poly), lw=2)
+end
+
+for (b, curve) in enumerate(image_branches)
+    isempty(curve) && continue
+    plot!(p_lens_ext, first.(curve), last.(curve); lw=3, seriescolor=pal_img[b])
+end
+
+# Source plane panel
+p_src_ext = plot(; aspect_ratio=:equal,
+    title="Source plane: caustic + source circle",
+    xlabel="βx", ylabel="βy",
+    legend=false
+)
+
+for poly in caustic_polylines
+    plot!(p_src_ext, first.(poly), last.(poly), lw=2)
+end
+
+plot!(p_src_ext, first.(source_boundary), last.(source_boundary); lw=3, linecolor=:black)
+# scatter!(p_src_ext, [β0[1]], [β0[2]]; markershape=:x, markersize=8)
+
+p_overlay_ext = plot(p_lens_ext, p_src_ext; layout=(1,2), size=(1200, 600))
+display(p_overlay_ext)
+
+savefig(p_overlay_ext, "generic_cusp_extended_overlay.png")
+println("Saved: generic_cusp_extended_overlay.png")
