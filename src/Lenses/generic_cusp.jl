@@ -67,9 +67,9 @@ function deflection_jacobian(lens::generic_cusp, θ::SVector{2,Float64})::SMatri
     e = lens.e
     x = θ[1]; y = θ[2]
     J11 = 1.0
-    J12 = -d * y
-    J21 = -d * y
-    J22 = 1 + (d * x) + (3 * e * (y^2))
+    J12 = d * y
+    J21 = d * y
+    J22 = (d * x) + (3 * e * (y^2))
     return @SMatrix [J11 J12;
                     J21 J22]
 end

@@ -3,6 +3,7 @@ using Optical_Drift_Effects
 using StaticArrays
 using LinearAlgebra
 using Plots
+using Contour  
 
 # -----------------------------
 # USER: construct your lens here
@@ -17,7 +18,7 @@ lens = generic_cusp(1, 1)   # <-- change this line to your lens object / paramet
 # Grid settings
 # -----------------------------
 Nx, Ny = 300, 300
-xmin, xmax = -4.0, 2.0
+xmin, xmax = -4.0, 0.5
 ymin, ymax = -2.0, 2.0
 
 xs = range(xmin, xmax; length=Nx)
@@ -94,26 +95,55 @@ p4 = heatmap(xs, ys, detJ;
     colorbar_title="detJ"
 )
 
-# -----------------------------
-# Plot: degnacy curves (det(J)=0) 
-# -----------------------------
-# You can add contour lines to p4 to show where det(J)=0, which are the critical curves. For example:
 contour!(p4, xs, ys, detJ;
-    levels=[0.0],  # contour level at det(J)=0
+    levels=[0.0],  
     linewidth=2,
-    linecolor=:black,
+    linecolor=:white,
     label="Critical curve"
 )
 
+
 # -----------------------------
-# Caustic curves in source plane 
+# Plot: critical curves (det(J)=0) 
 # -----------------------------
+# You can add contour lines to p4 to show where det(J)=0, which are the critical curves. For example:
+
+levs = [0.0]
+cs = contours(xs, ys, detJ', levs)
+
+critical_polylines = Vector{Vector{SVector{2,Float64}}}()
 
 
+for lvl in levels(cs)
+    for line in lines(lvl)
+        xline, yline = coordinates(line)   # <- two vectors
+        poly = [@SVector [xline[k], yline[k]] for k in eachindex(xline)]
+        push!(critical_polylines, poly)
+    end
+end
+# @show length(critical_polylines)
+# @show maximum(length.(critical_polylines))
+
+caustic_polylines = Vector{Vector{SVector{2,Float64}}}()
+
+for poly in critical_polylines
+    mapped = [θ - deflection_at(lens, θ) for θ in poly]
+    push!(caustic_polylines, mapped)
+end
+
+p5 = plot(; aspect_ratio=:equal,
+    title="Caustic curves in source plane",
+    xlabel="βx", ylabel="βy",
+    legend=false
+)
+
+for poly in caustic_polylines
+    plot!(p5, first.(poly), last.(poly), lw=2)
+end
 
 # -----------------------------
 # Display / save
 # -----------------------------
-plot(p1, p2, p3, p4; layout=(2,2), size=(1400, 800))
+plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
 savefig("generic_cusp_fields.png")
 println("Saved: generic_cusp_fields.png")
