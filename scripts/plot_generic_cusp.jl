@@ -17,20 +17,27 @@ lens = generic_cusp(1, 1)   # <-- change this line to your lens object / paramet
 # ------------------------------
 
 # Source circle parameters
-β0 = SVector{2,Float64}(-3.0, 0.2)   # center in source plane 
-Rs = 0.15                             # source radius 
-N = 10000                              # interior sampling number of points (if used)
+β0 = SVector{2,Float64}(-1.0, 0.4)   # center in source plane 
+Rs = 0.05                             # source radius 
+N = 60000                              # interior sampling number of points (if used)
 
 Nϕ = 200                           # boundary sampling points for image curve tracking (if used)
 ϕs = range(0, 2π; length=Nϕ+1)[1:end-1]
 source_boundary = [SVector{2,Float64}(β0[1] + Rs*cos(ϕ), β0[2] + Rs*sin(ϕ)) for ϕ in ϕs]
 
+src = SersicSource(
+    I0=1.0, Re=Rs, n=2.0,
+    q=1.0, ϕ=0.0,
+    β0=β0,
+    normalize=:none
+)
+
 # -----------------------------
 # Grid settings
 # -----------------------------
 Nx, Ny = 300, 300
-xmin, xmax = -8.0, 0.5
-ymin, ymax = -4.0, 4.0
+xmin, xmax = -4.0, 0.5
+ymin, ymax = -2.0, 2.0
 
 xs = range(xmin, xmax; length=Nx)
 ys = range(ymin, ymax; length=Ny)
@@ -149,9 +156,9 @@ end
 # -----------------------------
 # Display / save
 # -----------------------------
-plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
-savefig("generic_cusp_fields.pdf")
-println("Saved: generic_cusp_fields.pdf")
+# plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
+# savefig("generic_cusp_fields.pdf")
+# println("Saved: generic_cusp_fields.pdf")
 
 
 # --------------------------------------------
@@ -309,11 +316,9 @@ for poly in caustic_polylines
 end
 
 plot!(p_src_ext, first.(source_boundary), last.(source_boundary); lw=3, linecolor=:black)
-# scatter!(p_src_ext, [β0[1]], [β0[2]]; markershape=:x, markersize=8)
+
 
 p_overlay_ext = plot(p_lens_ext, p_src_ext; layout=(1,2), size=(1200, 600))
-display(p_overlay_ext)
-
 savefig(p_overlay_ext, "generic_cusp_extended_overlay.pdf")
 println("Saved: generic_cusp_extended_overlay.pdf")
 
@@ -359,7 +364,6 @@ function lensed_point_cloud(lens, βpts::Vector{SVector{2,Float64}}, image_posit
     return θpts
 end
 
-
 βpts = sample_disk_cloud(β0, Rs; N=N)
 θpts = lensed_point_cloud(lens, βpts, image_positions)
 
@@ -393,13 +397,8 @@ end
 scatter!(p_src, first.(βpts), last.(βpts);
     markersize=1.5, markerstrokewidth=0, alpha=0.35
 )
-# scatter!(p_src, [β0[1]], [β0[2]];
-#     markershape=:x, markersize=9
-# )
 
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
-display(p_overlay)
-
 savefig(p_overlay, "generic_cusp_extended_cloud.pdf")
 println("Saved: generic_cusp_extended_cloud.pdf")
 
@@ -407,6 +406,14 @@ println("Saved: generic_cusp_extended_cloud.pdf")
 # ---------------------------------------------
 # Binning of points for surface density estimation 
 # ---------------------------------------------
+
+Nbinsx, Nbinsy = 450, 450
+xedges = range(xmin, xmax; length=Nbinsx+1)
+yedges = range(ymin, ymax; length=Nbinsy+1)
+
+# bin centers for plotting axes
+xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
+ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
 
 function sample_disk_hist(β0::SVector{2,Float64}, R::Float64; N::Int=10_000)
     pts = Vector{SVector{2,Float64}}(undef, N)
@@ -458,15 +465,7 @@ end
 βpts = sample_disk_hist(β0, Rs; N)
 θpts = lensed_points(lens, βpts)
 
-Nbinsx, Nbinsy = 450, 450
-xedges = range(xmin, xmax; length=Nbinsx+1)
-yedges = range(ymin, ymax; length=Nbinsy+1)
-
 H = hist2d(θpts, xedges, yedges)
-
-# bin centers for plotting axes
-xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
-ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
 
 # Optional: log stretch for visibility
 Hplot = log10.(H .+ 1.0)
@@ -498,6 +497,127 @@ scatter!(p_src_sb, first.(βpts), last.(βpts);
 )
 
 p_overlay_sb = plot(p_sb, p_src_sb; layout=(1,2), size=(1200, 600))
-
 savefig(p_overlay_sb, "generic_cusp_surface_brightness.pdf")
 println("Saved: generic_cusp_surface_brightness.pdf")
+
+# ---------------------------------------------
+# Including non-uniform source brightness (e.g. Sersic profile)
+# Note: this requires modifying the sampling to weight points by the source intensity, or applying weights to the histogram counts.
+# ---------------------------------------------
+
+"""
+Uniformly sample N points in a disk envelope centered at src.β0,
+return (βpts, wts) where wts = intensity(src, β).
+
+Renvelope should be large enough to capture the profile wings.
+"""
+function sample_disk_with_weights(src; N::Int=10000, Renvelope::Float64=1.0, rng=Random.default_rng())
+    β0 = getfield(src, :β0)
+
+    βpts = Vector{SVector{2,Float64}}(undef, N)
+    wts  = Vector{Float64}(undef, N)
+
+    for n in 1:N
+        r = Renvelope * sqrt(rand(rng))   # uniform in area
+        ϕ = 2π * rand(rng)
+        β = SVector{2,Float64}(β0[1] + r*cos(ϕ), β0[2] + r*sin(ϕ))
+        βpts[n] = β
+        wts[n]  = float(intensity(src, β))  # <-- calls your Sersic.jl API
+    end
+
+    return βpts, wts
+end
+
+
+"""
+Compute weighted 2D histogram of lensed light.
+
+Adds wts[k] to every image pixel corresponding to βpts[k].
+"""
+function weighted_lensed_hist2d(lens,
+                               βpts::Vector{SVector{2,Float64}},
+                               wts::Vector{Float64},
+                               xedges::AbstractVector{<:Real},
+                               yedges::AbstractVector{<:Real},
+                               image_positions_fn)
+    nx = length(xedges) - 1
+    ny = length(yedges) - 1
+    H = zeros(Float64, ny, nx)  # (y,x) order for Plots heatmap
+
+    xmin, xmax = xedges[1], xedges[end]
+    ymin, ymax = yedges[1], yedges[end]
+
+    for (β, w) in zip(βpts, wts)
+        w == 0.0 && continue
+        imgs = image_positions_fn(lens, β)
+        for θ in imgs
+            x, y = θ[1], θ[2]
+            if x < xmin || x >= xmax || y < ymin || y >= ymax
+                continue
+            end
+            ix = clamp(searchsortedlast(xedges, x), 1, nx)
+            iy = clamp(searchsortedlast(yedges, y), 1, ny)
+            H[iy, ix] += w
+        end
+    end
+
+    return H
+end
+
+# Choose envelope size for Sersic:
+# A decent default is ~6–10 Re (larger for higher n).
+Renvelope = 4 * src.Re
+
+βpts, wts = sample_disk_with_weights(src; N=60_000, Renvelope=Renvelope)
+
+# histogram grid
+Nbinsx, Nbinsy = 550, 550
+xedges = range(xmin, xmax; length=Nbinsx+1)
+yedges = range(ymin, ymax; length=Nbinsy+1)
+
+
+H = weighted_lensed_hist2d(lens, βpts, wts, xedges, yedges, image_positions)
+
+xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
+ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
+
+Hplot = log10.(H .+ 1e-12)
+
+
+# --- left panel: lens plane heatmap + critical curve ---
+p_lens = heatmap(xcent, ycent, Hplot;
+    aspect_ratio=:equal,
+    xlabel="θx", ylabel="θy",
+    title="Lens plane: lensed Sérsic (weighted) + critical curve",
+    colorbar_title="log10(flux+ε)",
+    legend=false
+)
+
+for poly in critical_polylines
+    plot!(p_lens, first.(poly), last.(poly); lw=2, linecolor=:white)
+end
+
+# --- right panel: source plane caustic + sampled source (alpha ∝ weight) ---
+p_src = plot(; aspect_ratio=:equal,
+    xlabel="βx", ylabel="βy",
+    title="Source plane: caustic + sampled Sérsic source",
+    legend=false
+)
+
+for poly in caustic_polylines
+    plot!(p_src, first.(poly), last.(poly); lw=2)
+end
+
+# scale weights to alpha range for visibility
+wmax = maximum(wts)
+# as = [clamp(w / wmax, 0.0, 1.0) for w in wts]
+
+scatter!(p_src, first.(βpts), last.(βpts);
+    markersize=1.5,
+    markerstrokewidth=0,
+    alpha=0.01
+)
+
+p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
+savefig(p_overlay, "generic_cusp_sersic_weighted.pdf")
+println("Saved: generic_cusp_sersic_weighted.pdf")
