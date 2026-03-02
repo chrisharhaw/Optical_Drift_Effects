@@ -48,6 +48,14 @@ ax  = zeros(Float64, Ny, Nx)   # deflection x
 ay  = zeros(Float64, Ny, Nx)   # deflection y
 detJ = zeros(Float64, Ny, Nx)  # lensing jacobian
 
+# ------------------------------
+# Binning for surface density estimation
+# ------------------------------
+# histogram grid
+Nbinsx, Nbinsy = 550, 550
+xedges = range(xmin, xmax; length=Nbinsx+1)
+yedges = range(ymin, ymax; length=Nbinsy+1)
+
 # -----------------------------
 # lensing functions at a point (wrapper for your lens functions)
 # -----------------------------
@@ -218,113 +226,6 @@ end
 
 # ---------------------------------------------
 # Overlay figure - Extended sources
-# USES BOUNDARY TRACKING TO PLOT IMAGE CURVES - first approach, not robust to caustic crossings
-#
-# Note: the image tracking here is very naive and will break if the source crosses a caustic.
-# For a more robust implementation, you would need to handle changes in image count and track branches more carefully.
-# ---------------------------------------------
-
-function track_image_branches(lens, boundary::Vector{SVector{2,Float64}}; max_branches=3)
-    # branches[b] is a Vector{SVector{2}} curve in lens plane
-    branches = [SVector{2,Float64}[] for _ in 1:max_branches]
-
-    # initialize
-    imgs0 = image_positions(lens, boundary[1])
-    imgs0 = sort(imgs0; by = p -> p[2])  # sort by y for stable ordering
-    for b in 1:min(length(imgs0), max_branches)
-        push!(branches[b], imgs0[b])
-    end
-    active = min(length(imgs0), max_branches)
-
-    prev = imgs0
-
-    # walk around boundary
-    for n in 2:length(boundary)
-        imgs = image_positions(lens, boundary[n])
-
-        # if image count changes, the simple tracker will struggle.
-        # For now, we’ll just handle the common case: count stays same.
-        if length(imgs) != length(prev)
-            # break continuity: push NaN separators into all branches
-            for b in 1:max_branches
-                push!(branches[b], SVector{2,Float64}(NaN, NaN))
-            end
-            prev = imgs
-            continue
-        end
-
-        # greedy nearest-neighbor matching between prev and imgs
-        used = falses(length(imgs))
-        new_order = Vector{SVector{2,Float64}}(undef, length(imgs))
-
-        for i in 1:length(prev)
-            # find closest unused img to prev[i]
-            best_j = 0
-            best_d = Inf
-            for j in 1:length(imgs)
-                used[j] && continue
-                d = sum((imgs[j] .- prev[i]).^2)
-                if d < best_d
-                    best_d = d
-                    best_j = j
-                end
-            end
-            used[best_j] = true
-            new_order[i] = imgs[best_j]
-        end
-
-        # append to branches
-        active = min(length(new_order), max_branches)
-        for b in 1:active
-            push!(branches[b], new_order[b])
-        end
-        prev = new_order
-    end
-
-    return branches
-end
-
-image_branches = track_image_branches(lens, source_boundary)
-
-pal_img = palette(:tab10, 3)
-
-# Lens plane panel
-p_lens_ext = plot(; aspect_ratio=:equal,
-    title="Lens plane: critical curve + extended images",
-    xlabel="θx", ylabel="θy",
-    legend=false
-)
-
-for poly in critical_polylines
-    plot!(p_lens_ext, first.(poly), last.(poly), lw=2)
-end
-
-for (b, curve) in enumerate(image_branches)
-    isempty(curve) && continue
-    plot!(p_lens_ext, first.(curve), last.(curve); lw=3, seriescolor=pal_img[b])
-end
-
-# Source plane panel
-p_src_ext = plot(; aspect_ratio=:equal,
-    title="Source plane: caustic + source circle",
-    xlabel="βx", ylabel="βy",
-    legend=false
-)
-
-for poly in caustic_polylines
-    plot!(p_src_ext, first.(poly), last.(poly), lw=2)
-end
-
-plot!(p_src_ext, first.(source_boundary), last.(source_boundary); lw=3, linecolor=:black)
-
-
-p_overlay_ext = plot(p_lens_ext, p_src_ext; layout=(1,2), size=(1200, 600))
-savefig(p_overlay_ext, "generic_cusp_extended_overlay.pdf")
-println("Saved: generic_cusp_extended_overlay.pdf")
-
-
-# ---------------------------------------------
-# Overlay figure - Extended sources
 # SOURCE PLANE SAMPLING APPROACH (more robust to caustic crossings, but no image curve plotting)
 # Note: this approach just plots discrete image points for a grid of source positions, so it won't give smooth curves. 
 # You would need a more sophisticated sampling strategy to get nice curves.
@@ -399,17 +300,17 @@ scatter!(p_src, first.(βpts), last.(βpts);
 )
 
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
-savefig(p_overlay, "generic_cusp_extended_cloud.pdf")
-println("Saved: generic_cusp_extended_cloud.pdf")
+# savefig(p_overlay, "generic_cusp_extended_cloud.pdf")
+# println("Saved: generic_cusp_extended_cloud.pdf")
 
 
 # ---------------------------------------------
 # Binning of points for surface density estimation 
 # ---------------------------------------------
 
-Nbinsx, Nbinsy = 450, 450
-xedges = range(xmin, xmax; length=Nbinsx+1)
-yedges = range(ymin, ymax; length=Nbinsy+1)
+# Nbinsx, Nbinsy = 450, 450
+# xedges = range(xmin, xmax; length=Nbinsx+1)
+# yedges = range(ymin, ymax; length=Nbinsy+1)
 
 # bin centers for plotting axes
 xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
@@ -569,12 +470,6 @@ end
 Renvelope = 4 * src.Re
 
 βpts, wts = sample_disk_with_weights(src; N=60_000, Renvelope=Renvelope)
-
-# histogram grid
-Nbinsx, Nbinsy = 550, 550
-xedges = range(xmin, xmax; length=Nbinsx+1)
-yedges = range(ymin, ymax; length=Nbinsy+1)
-
 
 H = weighted_lensed_hist2d(lens, βpts, wts, xedges, yedges, image_positions)
 
