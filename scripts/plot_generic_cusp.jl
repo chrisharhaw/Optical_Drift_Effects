@@ -21,16 +21,19 @@ lens = generic_cusp(1, 1)   # <-- change this line to your lens object / paramet
 Rs = 0.05                             # source radius 
 N = 60000                              # interior sampling number of points (if used)
 
-Nϕ = 200                           # boundary sampling points for image curve tracking (if used)
-ϕs = range(0, 2π; length=Nϕ+1)[1:end-1]
-source_boundary = [SVector{2,Float64}(β0[1] + Rs*cos(ϕ), β0[2] + Rs*sin(ϕ)) for ϕ in ϕs]
-
 src = SersicSource(
-    I0=1.0, Re=Rs, n=2.0,
-    q=1.0, ϕ=0.0,
+    I0=1.0,
+    Re=Rs,
+    n=2.0, # Sersic index (n=1 exponential, n=4 de Vaucouleurs)
+    q=1.0, #axis ratio (1.0 = circular)
+    ϕ=0.0, # position angle (radians, for elliptical sources)
     β0=β0,
-    normalize=:none
+    normalize=:none 
 )
+
+# Choose envelope size for Sersic:
+# A decent default is ~6–10 Re (larger for higher n).
+Renvelope = 2 * src.Re
 
 # -----------------------------
 # Grid settings
@@ -48,84 +51,35 @@ ax  = zeros(Float64, Ny, Nx)   # deflection x
 ay  = zeros(Float64, Ny, Nx)   # deflection y
 detJ = zeros(Float64, Ny, Nx)  # lensing jacobian
 
-# ------------------------------
+# ---------------------------------------------
 # Binning for surface density estimation
-# ------------------------------
+# ---------------------------------------------
 # histogram grid
 Nbinsx, Nbinsy = 550, 550
 xedges = range(xmin, xmax; length=Nbinsx+1)
 yedges = range(ymin, ymax; length=Nbinsy+1)
 
-# -----------------------------
+# bin centers for plotting axes
+xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
+ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
+
+# ---------------------------------------------
 # lensing functions at a point (wrapper for your lens functions)
-# -----------------------------
+# ---------------------------------------------
 potential_at(lens, θ) = potential(lens, θ)                 
 deflection_at(lens, θ) = deflection(lens, θ)               # returns SVector(αx, αy)
 jacobian_at(lens, θ) = deflection_jacobian(lens, θ)        # returns 2x2 (SMatrix ok)
 
-# -----------------------------
+# ---------------------------------------------
 # Evaluate on grid
-# -----------------------------
+# ---------------------------------------------
 for (j, y) in enumerate(ys), (i, x) in enumerate(xs)
     θ = @SVector [x, y]
 
-    Ψ[i, j] = potential_at(lens, θ)
-
-    a = deflection_at(lens, θ)
-    ax[i, j] = a[1]
-    ay[i, j] = a[2]
-
     J = jacobian_at(lens, θ)
-    detJ[i, j] = det(Matrix(J))   # safe if J is SMatrix or Matrix
-
-    betax = x - ax[i, j]
-    betay = y - ay[i, j]
-    beta = @SVector [betax, betay]
+    detJ[i, j] = det(Matrix(J))   
 end
 
-# -----------------------------
-# Plot: Potential
-# -----------------------------
-p1 = heatmap(xs, ys, Ψ';
-    aspect_ratio=:equal,
-    title="Lensing potential Ψ(θ)",
-    xlabel="θx", ylabel="θy",
-    colorbar_title="Ψ"
-)
-
-# -----------------------------
-# Plot: Deflection components
-# -----------------------------
-p2 = heatmap(ys, xs, ax;
-    aspect_ratio=:equal,
-    title="Deflection ax(θ)",
-    xlabel="θx", ylabel="θy",
-    colorbar_title="ax"
-)
-
-p3 = heatmap(ys, xs, ay;
-    aspect_ratio=:equal,
-    title="Deflection ay(θ)",
-    xlabel="θx", ylabel="θy",
-    colorbar_title="ay"
-)
-
-# -----------------------------
-# Plot: det(J)
-# -----------------------------
-p4 = heatmap(ys, xs, detJ';
-    aspect_ratio=:equal,
-    title="det(Jacobian)",
-    xlabel="θx", ylabel="θy",
-    colorbar_title="detJ"
-)
-
-contour!(p4, ys, xs, detJ';
-    levels=[0.0],  
-    linewidth=2,
-    linecolor=:white,
-    label="Critical curve"
-)
 
 # -----------------------------
 # Plot: caustic curves (recalculate critical curves (det(J)=0) 
@@ -150,24 +104,6 @@ for poly in critical_polylines
     mapped = [θ - deflection_at(lens, θ) for θ in poly]
     push!(caustic_polylines, mapped)
 end
-
-p5 = plot(; aspect_ratio=:equal,
-    title="Caustic curves in source plane",
-    xlabel="βx", ylabel="βy",
-    legend=false
-)
-
-for poly in caustic_polylines
-    plot!(p5, first.(poly), last.(poly), lw=2)
-end
-
-# -----------------------------
-# Display / save
-# -----------------------------
-# plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
-# savefig("generic_cusp_fields.pdf")
-# println("Saved: generic_cusp_fields.pdf")
-
 
 # --------------------------------------------
 # Image positions for a specific source position β
@@ -227,8 +163,7 @@ end
 # ---------------------------------------------
 # Overlay figure - Extended sources
 # SOURCE PLANE SAMPLING APPROACH (more robust to caustic crossings, but no image curve plotting)
-# Note: this approach just plots discrete image points for a grid of source positions, so it won't give smooth curves. 
-# You would need a more sophisticated sampling strategy to get nice curves.
+# Note: this approach just plots discrete image points for a grid of source positions
 # ---------------------------------------------
 
 """
@@ -237,7 +172,7 @@ end
 Uniformly sample N points inside a disk of radius R centered at β0.
 Returns Vector{SVector{2,Float64}}.
 """
-function sample_disk_cloud(β0::SVector{2,Float64}, R::Float64; N::Int=5000, rng=Random.default_rng())
+function sample_disc(β0::SVector{2,Float64}, R::Float64; N::Int=10000, rng=Random.default_rng())
     pts = Vector{SVector{2,Float64}}(undef, N)
     for n in 1:N
         # Uniform in area: radius = R*sqrt(u)
@@ -250,23 +185,23 @@ function sample_disk_cloud(β0::SVector{2,Float64}, R::Float64; N::Int=5000, rng
 end
 
 """
-    lensed_point_cloud(lens, βpts, image_positions)
+     lensed_points(lens, βpts)
 
-For each β in βpts, compute image positions θ via `image_positions(lens, β)`.
-Returns:
-- θpts::Vector{SVector{2,Float64}} (all image points concatenated)
+ For each β in βpts, compute image positions θ via `image_positions(lens, β)`.
+ Returns:
+ - θpts::Vector{SVector{2,Float64}} (all image points concatenated)
 """
-function lensed_point_cloud(lens, βpts::Vector{SVector{2,Float64}}, image_positions_fn)
+function lensed_points(lens, βpts::Vector{SVector{2,Float64}})
     θpts = SVector{2,Float64}[]
     for β in βpts
-        imgs = image_positions_fn(lens, β)
+        imgs = image_positions(lens, β)
         append!(θpts, imgs)
     end
     return θpts
 end
 
-βpts = sample_disk_cloud(β0, Rs; N=N)
-θpts = lensed_point_cloud(lens, βpts, image_positions)
+βpts = sample_disc(β0, Rs; N=N)
+θpts = lensed_points(lens, βpts)
 
 # ---- Lens plane plot ----
 p_lens = plot(; aspect_ratio=:equal,
@@ -306,40 +241,13 @@ p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
 
 # ---------------------------------------------
 # Binning of points for surface density estimation 
+# Note: gives a "pixelated" image that can be used to visualize the surface brightness distribution, but does not give smooth image curves.
 # ---------------------------------------------
-
-# Nbinsx, Nbinsy = 450, 450
-# xedges = range(xmin, xmax; length=Nbinsx+1)
-# yedges = range(ymin, ymax; length=Nbinsy+1)
-
-# bin centers for plotting axes
-xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
-ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
-
-function sample_disk_hist(β0::SVector{2,Float64}, R::Float64; N::Int=10_000)
-    pts = Vector{SVector{2,Float64}}(undef, N)
-    for n in 1:N
-        # uniform in area
-        r = R * sqrt(rand())
-        ϕ = 2π * rand()
-        pts[n] = SVector{2,Float64}(β0[1] + r*cos(ϕ), β0[2] + r*sin(ϕ))
-    end
-    return pts
-end
-
-
-function lensed_points(lens, βpts::Vector{SVector{2,Float64}})
-    θpts = SVector{2,Float64}[]
-    for β in βpts
-        imgs = image_positions(lens, β)   # <-- uses your point-source solver
-        append!(θpts, imgs)
-    end
-    return θpts
-end
 
 function hist2d(points::Vector{SVector{2,Float64}},
                 xedges::AbstractVector{<:Real},
                 yedges::AbstractVector{<:Real})
+
     nx = length(xedges) - 1
     ny = length(yedges) - 1
     H = zeros(Float64, ny, nx)  # IMPORTANT: (y,x) for Plots heatmap
@@ -363,7 +271,7 @@ function hist2d(points::Vector{SVector{2,Float64}},
     return H
 end
 
-βpts = sample_disk_hist(β0, Rs; N)
+βpts = sample_disc(β0, Rs; N)
 θpts = lensed_points(lens, βpts)
 
 H = hist2d(θpts, xedges, yedges)
@@ -412,7 +320,9 @@ return (βpts, wts) where wts = intensity(src, β).
 
 Renvelope should be large enough to capture the profile wings.
 """
-function sample_disk_with_weights(src; N::Int=10000, Renvelope::Float64=1.0, rng=Random.default_rng())
+function sample_disk_with_weights(src; N::Int=10000, 
+                                Renvelope::Float64=1.0,
+                                rng=Random.default_rng())
     β0 = getfield(src, :β0)
 
     βpts = Vector{SVector{2,Float64}}(undef, N)
@@ -423,7 +333,7 @@ function sample_disk_with_weights(src; N::Int=10000, Renvelope::Float64=1.0, rng
         ϕ = 2π * rand(rng)
         β = SVector{2,Float64}(β0[1] + r*cos(ϕ), β0[2] + r*sin(ϕ))
         βpts[n] = β
-        wts[n]  = float(intensity(src, β))  # <-- calls your Sersic.jl API
+        wts[n]  = float(intensity(src, β))  #calls from source profile
     end
 
     return βpts, wts
@@ -465,16 +375,9 @@ function weighted_lensed_hist2d(lens,
     return H
 end
 
-# Choose envelope size for Sersic:
-# A decent default is ~6–10 Re (larger for higher n).
-Renvelope = 4 * src.Re
-
 βpts, wts = sample_disk_with_weights(src; N=60_000, Renvelope=Renvelope)
 
 H = weighted_lensed_hist2d(lens, βpts, wts, xedges, yedges, image_positions)
-
-xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
-ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
 
 Hplot = log10.(H .+ 1e-12)
 
