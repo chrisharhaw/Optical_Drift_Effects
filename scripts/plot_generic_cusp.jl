@@ -7,20 +7,30 @@ using Contour
 using Random
 
 # -----------------------------
-# USER: construct your lens here
+# Lens set-up
 # -----------------------------
-# Example:
-# lens = GenericCusp( ... )
-# or whatever your constructor is
 
 lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters
+
+# ------------------------------
+# Source set-up
+# ------------------------------
+
+# Source circle parameters
+β0 = SVector{2,Float64}(-3.0, 0.2)   # center in source plane 
+Rs = 0.15                             # source radius 
+N = 10000                              # interior sampling number of points (if used)
+
+Nϕ = 200                           # boundary sampling points for image curve tracking (if used)
+ϕs = range(0, 2π; length=Nϕ+1)[1:end-1]
+source_boundary = [SVector{2,Float64}(β0[1] + Rs*cos(ϕ), β0[2] + Rs*sin(ϕ)) for ϕ in ϕs]
 
 # -----------------------------
 # Grid settings
 # -----------------------------
 Nx, Ny = 300, 300
-xmin, xmax = -4.0, 0.5
-ymin, ymax = -2.0, 2.0
+xmin, xmax = -8.0, 0.5
+ymin, ymax = -4.0, 4.0
 
 xs = range(xmin, xmax; length=Nx)
 ys = range(ymin, ymax; length=Ny)
@@ -32,8 +42,7 @@ ay  = zeros(Float64, Ny, Nx)   # deflection y
 detJ = zeros(Float64, Ny, Nx)  # lensing jacobian
 
 # -----------------------------
-# USER: pointwise evaluation functions
-# Replace these wrappers with your actual function names
+# lensing functions at a point (wrapper for your lens functions)
 # -----------------------------
 potential_at(lens, θ) = potential(lens, θ)                 
 deflection_at(lens, θ) = deflection(lens, θ)               # returns SVector(αx, αy)
@@ -112,7 +121,7 @@ levs = [0.0]
 cs = contours(xs, ys, detJ, levs)
 
 critical_polylines = Vector{Vector{SVector{2,Float64}}}()
-
+caustic_polylines = Vector{Vector{SVector{2,Float64}}}()
 
 for lvl in levels(cs)
     for line in lines(lvl)
@@ -121,8 +130,6 @@ for lvl in levels(cs)
         push!(critical_polylines, poly)
     end
 end
-
-caustic_polylines = Vector{Vector{SVector{2,Float64}}}()
 
 for poly in critical_polylines
     mapped = [θ - deflection_at(lens, θ) for θ in poly]
@@ -142,67 +149,16 @@ end
 # -----------------------------
 # Display / save
 # -----------------------------
-# plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
-# savefig("generic_cusp_fields.png")
-# println("Saved: generic_cusp_fields.png")
+plot(p1, p4, p5; layout=(1,3), size=(1400, 800))
+savefig("generic_cusp_fields.pdf")
+println("Saved: generic_cusp_fields.pdf")
 
-
-
-# -----------------------------
-# Image configuration 
-# -----------------------------
-
-# --- helper: real cube root ---
-cbrt_real(x::Real) = sign(x) * abs(x)^(1/3)
-
-# --- discriminant field Δ(β) for the generic cusp ---
-function cusp_discriminant(lens, βx::Float64, βy::Float64)
-    d = lens.d
-    e = lens.e
-    a = e - 0.5*d^2               # coefficient of y^3
-    b = d * βx                    # coefficient of y
-    c = -βy                       # constant term
-
-    p = b / a
-    q = c / a
-
-    Δ = (q/2)^2 + (p/3)^3
-    return Δ
-end
-
-# --- choose a source-plane window around the cusp ---
-βxs = range(-6.5, 1.0; length=500)
-βys = range(-8.5, 8.5; length=500)
-
-Δgrid = Array{Float64}(undef, length(βys), length(βxs))
-for (j, βy) in enumerate(βys)
-    for (i, βx) in enumerate(βxs)
-        Δgrid[j,i] = cusp_discriminant(lens, βx, βy)
-    end
-end
-
-# --- Plot: 3-image region (Δ<0) vs 1-image region (Δ>0) ---
-p_mult = contourf(
-    βxs, βys, Δgrid;
-    levels=[-Inf, 0.0, Inf],
-    aspect_ratio=:equal,
-    xlabel="βx", ylabel="βy",
-    title="Image multiplicity near cusp (Δ<0 → 3 images, Δ>0 → 1 image)",
-    colorbar=false,
-    legend=false
-)
-
-# overlay caustic
-for poly in caustic_polylines
-    plot!(p_mult, first.(poly), last.(poly), lw=3)
-end
-# savefig(p_mult, "generic_cusp_multiplicity.png")
-# println("Saved: generic_cusp_multiplicity.png")
 
 # --------------------------------------------
 # Image positions for a specific source position β
 # ---------------------------------------------
-
+# --- helper: real cube root ---
+cbrt_real(x::Real) = sign(x) * abs(x)^(1/3)
 
 # Solve y^3 + p y + q = 0 for real roots
 function depressed_cubic_real_roots(p::Float64, q::Float64)
@@ -254,101 +210,12 @@ end
 
 
 # ---------------------------------------------
-# Plot overlay figure - Point sources
-# ---------------------------------------------
-
-# Choose some source positions to test image configurations
-sources = SVector{2,Float64}[
-    SVector{2,Float64}(-3.0, 0.0),   # often inside → 3 images
-    SVector{2,Float64}(-0.5, 3.0),   # likely outside → 1 image
-    SVector{2,Float64}(-2.5, 1.0),   # near boundary
-]
-
-# Build a palette with one color per source
-pal = palette(:tab10, length(sources))
-
-# Compute images for each source
-all_images = Vector{Vector{SVector{2,Float64}}}()
-for β in sources
-    push!(all_images, image_positions(lens, β))
-end
-
-println("Image counts per source: ", [length(imgs) for imgs in all_images])
-
-# Lens-plane panel: critical curve + images
-p_lens = plot(; aspect_ratio=:equal,
-    title="Lens plane: critical curve + images",
-    xlabel="θx", ylabel="θy",
-    legend=false
-)
-
-# plot critical curve(s)
-for poly in critical_polylines
-    plot!(p_lens, first.(poly), last.(poly), lw=2)
-end
-
-for (k, imgs) in enumerate(all_images)
-    isempty(imgs) && continue
-    scatter!(p_lens, first.(imgs), last.(imgs);
-        markersize=5,
-        markershape=:circle,
-        seriescolor=pal[k],
-        markerstrokecolor=pal[k],
-        markerstrokewidth=0
-    )
-end
-
-# Source-plane panel: caustic + sources
-p_src = plot(; aspect_ratio=:equal,
-    title="Source plane: caustic + sources",
-    xlabel="βx", ylabel="βy",
-    legend=false
-)
-
-# plot caustic(s)
-for poly in caustic_polylines
-    plot!(p_src, first.(poly), last.(poly), lw=2)
-end
-
-# Plot sources as crosses, using the SAME colors
-for (k, β) in enumerate(sources)
-    scatter!(p_src, [β[1]], [β[2]];
-        markersize=9,
-        markershape=:x,
-        seriescolor=pal[k],
-        markerstrokecolor=pal[k],
-        markerstrokewidth=2
-    )
-end
-
-# plot sources (crosses)
-scatter!(p_src, first.(sources), last.(sources);
-    markersize=7, markershape=:x
-)
-
-# Combine and save
-p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
-
-# display(p_overlay)
-# savefig(p_overlay, "generic_cusp_overlay.png")
-# println("Saved: generic_cusp_overlay.png")
-
-# ---------------------------------------------
 # Overlay figure - Extended sources
 # USES BOUNDARY TRACKING TO PLOT IMAGE CURVES - first approach, not robust to caustic crossings
 #
 # Note: the image tracking here is very naive and will break if the source crosses a caustic.
 # For a more robust implementation, you would need to handle changes in image count and track branches more carefully.
 # ---------------------------------------------
-
-# Source circle parameters
-β0 = SVector{2,Float64}(-0.0, 0.0)   # center in source plane (edit)
-Rs = 0.15                             # source radius (edit)
-Nϕ = 200                              # boundary sampling
-N = 4000                              # interior sampling (not used in this approach)
-
-ϕs = range(0, 2π; length=Nϕ+1)[1:end-1]
-source_boundary = [SVector{2,Float64}(β0[1] + Rs*cos(ϕ), β0[2] + Rs*sin(ϕ)) for ϕ in ϕs]
 
 function track_image_branches(lens, boundary::Vector{SVector{2,Float64}}; max_branches=3)
     # branches[b] is a Vector{SVector{2}} curve in lens plane
@@ -447,8 +314,8 @@ plot!(p_src_ext, first.(source_boundary), last.(source_boundary); lw=3, linecolo
 p_overlay_ext = plot(p_lens_ext, p_src_ext; layout=(1,2), size=(1200, 600))
 display(p_overlay_ext)
 
-savefig(p_overlay_ext, "generic_cusp_extended_overlay.png")
-println("Saved: generic_cusp_extended_overlay.png")
+savefig(p_overlay_ext, "generic_cusp_extended_overlay.pdf")
+println("Saved: generic_cusp_extended_overlay.pdf")
 
 
 # ---------------------------------------------
@@ -464,7 +331,7 @@ println("Saved: generic_cusp_extended_overlay.png")
 Uniformly sample N points inside a disk of radius R centered at β0.
 Returns Vector{SVector{2,Float64}}.
 """
-function sample_disk(β0::SVector{2,Float64}, R::Float64; N::Int=5000, rng=Random.default_rng())
+function sample_disk_cloud(β0::SVector{2,Float64}, R::Float64; N::Int=5000, rng=Random.default_rng())
     pts = Vector{SVector{2,Float64}}(undef, N)
     for n in 1:N
         # Uniform in area: radius = R*sqrt(u)
@@ -493,7 +360,7 @@ function lensed_point_cloud(lens, βpts::Vector{SVector{2,Float64}}, image_posit
 end
 
 
-βpts = sample_disk(β0, Rs; N=N)
+βpts = sample_disk_cloud(β0, Rs; N=N)
 θpts = lensed_point_cloud(lens, βpts, image_positions)
 
 # ---- Lens plane plot ----
@@ -526,12 +393,111 @@ end
 scatter!(p_src, first.(βpts), last.(βpts);
     markersize=1.5, markerstrokewidth=0, alpha=0.35
 )
-scatter!(p_src, [β0[1]], [β0[2]];
-    markershape=:x, markersize=9
-)
+# scatter!(p_src, [β0[1]], [β0[2]];
+#     markershape=:x, markersize=9
+# )
 
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
 display(p_overlay)
 
-savefig(p_overlay, "generic_cusp_extended_cloud.png")
-println("Saved: generic_cusp_extended_cloud.png")
+savefig(p_overlay, "generic_cusp_extended_cloud.pdf")
+println("Saved: generic_cusp_extended_cloud.pdf")
+
+
+# ---------------------------------------------
+# Binning of points for surface density estimation 
+# ---------------------------------------------
+
+function sample_disk_hist(β0::SVector{2,Float64}, R::Float64; N::Int=10_000)
+    pts = Vector{SVector{2,Float64}}(undef, N)
+    for n in 1:N
+        # uniform in area
+        r = R * sqrt(rand())
+        ϕ = 2π * rand()
+        pts[n] = SVector{2,Float64}(β0[1] + r*cos(ϕ), β0[2] + r*sin(ϕ))
+    end
+    return pts
+end
+
+
+function lensed_points(lens, βpts::Vector{SVector{2,Float64}})
+    θpts = SVector{2,Float64}[]
+    for β in βpts
+        imgs = image_positions(lens, β)   # <-- uses your point-source solver
+        append!(θpts, imgs)
+    end
+    return θpts
+end
+
+function hist2d(points::Vector{SVector{2,Float64}},
+                xedges::AbstractVector{<:Real},
+                yedges::AbstractVector{<:Real})
+    nx = length(xedges) - 1
+    ny = length(yedges) - 1
+    H = zeros(Float64, ny, nx)  # IMPORTANT: (y,x) for Plots heatmap
+
+    xmin, xmax = xedges[1], xedges[end]
+    ymin, ymax = yedges[1], yedges[end]
+
+    for p in points
+        x, y = p[1], p[2]
+        # skip points outside plotting window
+        if x < xmin || x >= xmax || y < ymin || y >= ymax
+            continue
+        end
+        ix = searchsortedlast(xedges, x)
+        iy = searchsortedlast(yedges, y)
+        # clamp to valid bins
+        ix = clamp(ix, 1, nx)
+        iy = clamp(iy, 1, ny)
+        H[iy, ix] += 1.0
+    end
+    return H
+end
+
+βpts = sample_disk_hist(β0, Rs; N)
+θpts = lensed_points(lens, βpts)
+
+Nbinsx, Nbinsy = 450, 450
+xedges = range(xmin, xmax; length=Nbinsx+1)
+yedges = range(ymin, ymax; length=Nbinsy+1)
+
+H = hist2d(θpts, xedges, yedges)
+
+# bin centers for plotting axes
+xcent = @. 0.5*(xedges[1:end-1] + xedges[2:end])
+ycent = @. 0.5*(yedges[1:end-1] + yedges[2:end])
+
+# Optional: log stretch for visibility
+Hplot = log10.(H .+ 1.0)
+
+p_sb = heatmap(xcent, ycent, Hplot;
+    aspect_ratio=:equal,
+    xlabel="θx", ylabel="θy",
+    title="Extended source lensed image (binned point cloud)",
+    colorbar_title="log10(count+1)"
+)
+
+# Overlay critical curve (lens plane)
+for poly in critical_polylines
+    plot!(p_sb, first.(poly), last.(poly), lw=2, linecolor=:white)
+end
+
+p_src_sb = plot(; aspect_ratio=:equal,
+    xlabel="βx", ylabel="βy",
+    title="Source plane: sampled disk + caustic",
+    legend=false
+)
+
+for poly in caustic_polylines
+    plot!(p_src_sb, first.(poly), last.(poly); lw=2)
+end
+
+scatter!(p_src_sb, first.(βpts), last.(βpts);
+    markersize=1.5, markerstrokewidth=0, alpha=0.25
+)
+
+p_overlay_sb = plot(p_sb, p_src_sb; layout=(1,2), size=(1200, 600))
+
+savefig(p_overlay_sb, "generic_cusp_surface_brightness.pdf")
+println("Saved: generic_cusp_surface_brightness.pdf")
