@@ -32,7 +32,6 @@ src = SersicSource(
 )
 
 # Choose envelope size for Sersic:
-# A decent default is ~6–10 Re (larger for higher n).
 Renvelope = 2 * src.Re
 
 # -----------------------------
@@ -408,14 +407,120 @@ end
 
 # scale weights to alpha range for visibility
 wmax = maximum(wts)
-# as = [clamp(w / wmax, 0.0, 1.0) for w in wts]
+as = [clamp(w / wmax, 0.0, 1.0) for w in wts]
 
 scatter!(p_src, first.(βpts), last.(βpts);
     markersize=1.5,
     markerstrokewidth=0,
-    alpha=0.01
+    alpha=as
 )
 
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
 savefig(p_overlay, "generic_cusp_sersic_weighted.pdf")
 println("Saved: generic_cusp_sersic_weighted.pdf")
+
+
+# -------------------------------------------------------------
+# Animation of source moving across caustic
+# -------------------------------------------------------------
+
+function sample_disk_with_weights_relative(src;
+        N::Int=30_000,
+        Renvelope::Float64=2src.Re,
+        rng=Random.default_rng())
+
+    βrel = Vector{SVector{2,Float64}}(undef, N)
+    wts  = Vector{Float64}(undef, N)
+
+    # Temporarily treat the source as centered at origin for intensity eval
+    src0 = SersicSource(
+        I0=src.I0, Re=src.Re, n=src.n, q=src.q, ϕ=src.ϕ,
+        β0 = SVector{2,Float64}(0.0, 0.0),
+        normalize=src.normalize
+    )
+
+    for n in 1:N
+        r = Renvelope * sqrt(rand(rng))
+        ϕ = 2π * rand(rng)
+        p = @SVector [r*cos(ϕ), r*sin(ϕ)]
+        βrel[n] = p
+        wts[n]  = float(intensity(src0, p))
+    end
+    return βrel, wts
+end
+
+normalize2(v::SVector{2,Float64}) = v / hypot(v[1], v[2])
+
+function line_path(βstart::SVector{2,Float64}, v::SVector{2,Float64}, ts)
+    vhat = normalize2(v)
+    return [βstart + t*vhat for t in ts]
+end
+
+function frame_plot(lens, β0, βrel, wts;
+        xedges=xedges, yedges=yedges, xcent=xcent, ycent=ycent,
+        critical_polylines=critical_polylines,
+        caustic_polylines=caustic_polylines)
+
+    βpts = [β0 + p for p in βrel]
+
+    H = weighted_lensed_hist2d(lens, βpts, wts, xedges, yedges, image_positions)
+    Hplot = log10.(H .+ 1e-12)
+
+    p_lens = heatmap(xcent, ycent, Hplot;
+        aspect_ratio=:equal,
+        xlabel="θx", ylabel="θy",
+        title="Lens plane",
+        colorbar=false,
+        legend=false
+    )
+    for poly in critical_polylines
+        plot!(p_lens, first.(poly), last.(poly); lw=2, linecolor=:white)
+    end
+
+    p_src = plot(; aspect_ratio=:equal,
+        xlabel="βx", ylabel="βy",
+        title="Source plane",
+        legend=false
+    )
+    for poly in caustic_polylines
+        plot!(p_src, first.(poly), last.(poly); lw=2)
+    end
+    scatter!(p_src, [β0[1]], [β0[2]]; markersize=6)
+
+    return plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
+end
+
+function animate_crossing(lens;
+        outname="cusp_crossing.gif",
+        βstart = SVector{2,Float64}(-1.2, 0.3),
+        v = SVector{2,Float64}(1.0, 0.0),
+        tmin=-0.6,
+        tmax=2.0,
+        nframes=80,
+        Nsrc=8_000,
+        rng=MersenneTwister(1))
+
+    βrel, wts = sample_disk_with_weights_relative(src; N=Nsrc, Renvelope=Renvelope, rng=rng)
+
+    ts = range(tmin, tmax; length=nframes)
+    path = line_path(βstart, v, ts)
+
+    anim = @animate for β0 in path
+        frame_plot(lens, β0, βrel, wts)
+    end
+
+    gif(anim, outname; fps=20)
+    println("Saved: $outname")
+end
+
+# animate_crossing(lens; outname="cross_x.gif",
+#     βstart = SVector{2,Float64}(-1.6, 0.2),
+#     v      = SVector{2,Float64}(1.0, 0.0))
+
+# animate_crossing(lens; outname="cross_diag.gif",
+#     βstart = SVector{2,Float64}(-1.6, -0.4),
+#     v      = SVector{2,Float64}(1.0, 0.7))
+
+animate_crossing(lens; outname="cross_vertical.gif",
+    βstart = SVector{2,Float64}(-1.0, -1.0),
+    v      = SVector{2,Float64}(0.0, 1.0))
