@@ -9,13 +9,12 @@ using Random
 # -----------------------------
 # Lens set-up
 # -----------------------------
-
-lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters
+# d=1, e=1 
+lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters 
 
 # ------------------------------
 # Source set-up
 # ------------------------------
-# --- normalize helper (if you don't already have it) ---
 normalize2(v::SVector{2,Float64}) = v / hypot(v[1], v[2])
 
 
@@ -261,8 +260,8 @@ scatter!(p_src, [βstar[1]], [βstar[2]]; markersize=5)
 
 p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600))
 
-savefig(p_overlay, "halfplane_rayshooting.pdf")
-println("Saved: halfplane_rayshooting.pdf")
+# savefig(p_overlay, "halfplane_rayshooting.pdf")
+# println("Saved: halfplane_rayshooting.pdf")
 
 # ---------------------------------------------
 # Animation: move the half-plane source across the caustic
@@ -312,7 +311,7 @@ function animate_halfplane_crossing_offset(lens;
 
         p_lens = heatmap(xcent, ycent, Iplot;
             aspect_ratio=:equal, xlabel="θx", ylabel="θy",
-            title="Lens plane (half-plane, ray-shoot)",
+            title="Lens plane (half-plane), w = $w, n=$n",
             colorbar=false, legend=false
         )
         for poly in critical_polylines
@@ -341,12 +340,143 @@ function animate_halfplane_crossing_offset(lens;
     return nothing
 end
 
-animate_halfplane_crossing_offset(lens;
-    outname="hp_vertical.gif",
-    βc=SVector{2,Float64}(0.0, 0.0),            # move this near your caustic
-    n=normalize2(SVector{2,Float64}(0.0, 1.0)), # choose the approach direction
-    s_start=+2.0,
+# animate_halfplane_crossing_offset(lens;
+#     outname="hp_offVertical_long_gradient.gif",
+#     βc=SVector{2,Float64}(0.0, 0.0),            # move this near your caustic
+#     n=normalize2(SVector{2,Float64}(0.3, 1.0)), # choose the approach direction
+#     s_start=+2.0,
+#     s_end=-2.0,
+#     w=0.1, #0.015
+#     src_xlim=(-4.0, 4.0), src_ylim=(-4.0, 4.0)
+# )
+
+
+
+
+
+
+function animate_halfplane_crossing_offset_with_diff(lens;
+        outname::String="halfplane_with_diff.gif",
+        βc::SVector{2,Float64}=SVector{2,Float64}(0.0, 0.0),
+        n::SVector{2,Float64}=normalize2(SVector{2,Float64}(1.0, 0.0)),
+        s_start::Float64=+1.2,
+        s_end::Float64=-1.2,
+        nframes::Int=80,
+        fps::Int=20,
+        Ibright::Float64=1.0,
+        Idim::Float64=0.0,
+        w::Float64=0.02,
+        logeps::Float64=1e-12,
+        Lpatch::Float64=5.0,
+        αpatch::Float64=0.25,
+        src_xlim=nothing,
+        src_ylim=nothing,
+        size_px=(1400, 600),
+        diff_mode::Symbol=:signed,     # :signed or :abs
+        diff_clim::Union{Nothing,Float64}=nothing,  # fixed symmetric clim; if nothing auto-estimate
+        diff_scale::Symbol=:linear     # :linear or :logabs
+    )
+
+    # path of βstar(t) = βc + s(t)*n̂
+    ss   = range(s_start, s_end; length=nframes)
+    path = [βc + s*n for s in ss]   # n is assumed normalized already
+
+    I_prev = nothing
+
+    anim = @animate for k in 1:length(path)
+        βstar = path[k]
+        src_hp = HalfPlaneSource(Ibright, Idim, βstar, n, w)
+
+        # --- lens-plane intensity ---
+        Iθ = ray_shoot_intensity_map(lens, src_hp, xcent, ycent)
+
+        # --- difference image ---
+        Δ = if I_prev === nothing
+            zeros(size(Iθ))
+        else
+            Iθ .- I_prev
+        end
+        I_prev = Iθ
+
+        # ---- panel 1: lens plane (log) ----
+        p_lens = heatmap(xcent, ycent, log10.(Iθ .+ logeps);
+            aspect_ratio=:equal, xlabel="θx", ylabel="θy",
+            title="Lens plane I(θ)",
+            colorbar=false, legend=false
+        )
+        for poly in critical_polylines
+            plot!(p_lens, first.(poly), last.(poly); lw=2, linecolor=:white)
+        end
+
+        # ---- panel 2: ΔI ----
+        Z = Δ
+        titleΔ = "ΔI = Iₖ − Iₖ₋₁"
+
+        if diff_mode == :abs
+            Z = abs.(Δ)
+            titleΔ = "|ΔI|"
+        end
+
+        if diff_scale == :logabs
+            # show log magnitude, preserve sign if signed mode
+            if diff_mode == :signed
+                Z = sign.(Δ) .* log10.(abs.(Δ) .+ logeps)
+                titleΔ *= " (signed log10|ΔI|)"
+            else
+                Z = log10.(abs.(Δ) .+ logeps)
+                titleΔ *= " (log10|ΔI|)"
+            end
+        end
+
+        # choose symmetric color limits for signed linear mode
+        clim_used = nothing
+        if diff_clim !== nothing
+            clim_used = (-diff_clim, diff_clim)
+        elseif diff_mode == :signed && diff_scale == :linear
+            m = maximum(abs, Z)
+            clim_used = (-m, m)
+        end
+
+        p_diff = heatmap(xcent, ycent, Z;
+            aspect_ratio=:equal, xlabel="θx", ylabel="θy",
+            title=titleΔ,
+            colorbar=false, legend=false,
+            clim=clim_used
+        )
+        for poly in critical_polylines
+            plot!(p_diff, first.(poly), last.(poly); lw=2, linecolor=:white)
+        end
+
+        # ---- panel 3: source plane ----
+        p_src = plot(; aspect_ratio=:equal, xlabel="βx", ylabel="βy",
+            title="Source plane", legend=false
+        )
+        for poly in caustic_polylines
+            plot!(p_src, first.(poly), last.(poly); lw=2)
+        end
+        add_halfplane_to_sourceplot!(p_src, βstar, n; L=Lpatch, α=αpatch)
+        scatter!(p_src, [βstar[1]], [βstar[2]]; markersize=5)
+
+        if src_xlim !== nothing; xlims!(p_src, src_xlim); end
+        if src_ylim !== nothing; ylims!(p_src, src_ylim); end
+
+        plot(p_lens, p_diff, p_src; layout=(1,3), size=size_px)
+    end
+
+    gif(anim, outname; fps=fps)
+    println("Saved: $outname")
+    return nothing
+end
+
+animate_halfplane_crossing_offset_with_diff(lens;
+    outname="hp_diff_log.gif",
+    βc=SVector{2,Float64}(0.0, 0.0),            
+    n=normalize2(SVector{2,Float64}(0.3, 1.0)), # choose the approach direction
+    nframes=160,
+    s_start=+3.0,
     s_end=-2.0,
-    w=0.015,
-    src_xlim=(-4.0, 4.0), src_ylim=(-4.0, 4.0)
+    w=0.1,
+    src_xlim=(-4.0, 4.0), src_ylim=(-4.0, 4.0),
+    diff_mode=:abs,
+    diff_scale=:logabs,
 )
