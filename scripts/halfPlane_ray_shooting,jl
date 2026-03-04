@@ -290,7 +290,7 @@ function animate_halfplane_crossing_offset(lens;
         fps::Int=20,
         Ibright::Float64=1.0,
         Idim::Float64=0.0,
-        w::Float64=0.02,
+        w::Float64=0.02,            # controls steepness of half-plane boundary in source plane
         logeps::Float64=1e-12,
         Lpatch::Float64=5.0,
         αpatch::Float64=0.25,
@@ -348,5 +348,5 @@ animate_halfplane_crossing_offset(lens;
     s_start=+2.0,
     s_end=-2.0,
     w=0.015,
-    src_xlim=(-2.5, 2.5), src_ylim=(-2.5, 2.5)
+    src_xlim=(-4.0, 4.0), src_ylim=(-4.0, 4.0)
 )

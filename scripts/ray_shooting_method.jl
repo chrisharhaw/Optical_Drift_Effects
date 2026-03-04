@@ -223,6 +223,13 @@ function with_center(src::SersicSource, β0::SVector{2,Float64})
     )
 end
 
+normalize2(v::SVector{2,Float64}) = v / hypot(v[1], v[2])
+
+function line_path(βstart::SVector{2,Float64}, v::SVector{2,Float64}, ts)
+    vhat = normalize2(v)
+    return [βstart + t*vhat for t in ts]
+end
+
 function animate_rayshooting_sersic(lens, src;
         outname::String = "sersic_rayshooting.gif",
         βstart::SVector{2,Float64} = SVector{2,Float64}(-1.6, 0.2),
@@ -281,6 +288,6 @@ animate_rayshooting_sersic(lens, src; outname="cross_horizontal_rs.gif",
     v      = SVector{2,Float64}(1.0, 0.0))
 
 
-# animate_rayshooting_sersic(lens, src; outname="cross_vertical_rs.gif",
-#     βstart = SVector{2,Float64}(-1.0, -1.0),
-#     v      = SVector{2,Float64}(0.0, 1.0))
+animate_rayshooting_sersic(lens, src; outname="cross_vertical_rs.gif",
+    βstart = SVector{2,Float64}(-1.0, -1.0),
+    v      = SVector{2,Float64}(0.0, 1.0))
