@@ -3,8 +3,6 @@ using Optical_Drift_Effects
 using StaticArrays
 using LinearAlgebra
 using Plots
-using Contour  
-using Random
 
 # -----------------------------
 # Lens set-up
@@ -47,39 +45,12 @@ detJ = zeros(Float64, Ny_hi, Nx_hi)  # lensing jacobian
 deflection_at(lens, θ) = deflection(lens, θ)               # returns SVector(αx, αy)
 jacobian_at(lens, θ) = deflection_jacobian(lens, θ)        # returns 2x2 (SMatrix ok)
 
+
 # ---------------------------------------------
-# Evaluate on grid
+#  Critical curves: find det(J)=0 contours in image plane
 # ---------------------------------------------
-for (j, y) in enumerate(ys_hi), (i, x) in enumerate(xs_hi)
-    θ = @SVector [x, y]
-
-    J = jacobian_at(lens, θ)
-    detJ[i, j] = det(Matrix(J))   
-end
-
-# -----------------------------
-# Plot: caustic curves (recalculate critical curves (det(J)=0) 
-# -----------------------------
-# You can add contour lines to p4 to show where det(J)=0, which are the critical curves. For example:
-
-levs = [0.0]
-cs = contours(xs_hi, ys_hi, detJ, levs)
-
-critical_polylines = Vector{Vector{SVector{2,Float64}}}()
-caustic_polylines = Vector{Vector{SVector{2,Float64}}}()
-
-for lvl in levels(cs)
-    for line in lines(lvl)
-        xline, yline = coordinates(line)   # <- two vectors
-        poly = [@SVector [xline[k], yline[k]] for k in eachindex(xline)]
-        push!(critical_polylines, poly)
-    end
-end
-
-for poly in critical_polylines
-    mapped = [θ - deflection_at(lens, θ) for θ in poly]
-    push!(caustic_polylines, mapped)
-end
+critical_polylines = critical_curves(lens, xs_hi, ys_hi)
+caustic_polylines = caustic_curves(lens, critical_polylines)
 
 
 # --------------------------------------------

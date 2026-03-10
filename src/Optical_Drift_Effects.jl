@@ -12,8 +12,6 @@ include("Types.jl")
 # -------------------------
 # 2) Lens models
 # -------------------------
-include("Lenses/SIS.jl")
-include("Lenses/SIE.jl")
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 export generic_cusp, generic_fold, potential, deflection, deflection_jacobian
@@ -28,6 +26,13 @@ include("Sources/Sersic.jl")
 include("Sources/halfPlane.jl")
 include("Sources/checkerboard.jl")
 export SersicSource, HalfPlaneSource, CheckerboardSource, intensity, sersic_b
+
+# -------------------------
+# 4) Critical curves and caustics
+# -------------------------
+include("Caustics/CriticalCurves.jl")
+include("Caustics/CausticCurves.jl")
+export critical_curves, caustic_curves
 
 # -------------------------
 # 3) Public API exports
