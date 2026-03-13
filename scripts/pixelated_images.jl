@@ -5,16 +5,16 @@ using LinearAlgebra
 using Plots
 using Contour  
 using Random
-using DSP          # for conv (PSF convolution)
-using Distributions # for Poisson noise
+
+
 
 # -----------------------------
 # Lens set-up
 # -----------------------------
 # d=1, e=1 
-# lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters 
+lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters 
 
-lens = generic_fold(1)   
+# lens = generic_fold(1)   
 
 # ------------------------------
 # Source set-up
@@ -32,9 +32,9 @@ src = HalfPlaneSource(1.0, 0.0, βstar, n, w)
 # Grid settings
 # -----------------------------
 
-os = 4           # oversampling factor (pixels per output pixel, per axis)
+os = 20          # oversampling factor (pixels per output pixel, per axis)
 
-Nx_pix, Ny_pix = 200, 200                 # desired output (pixelated) resolution
+Nx_pix, Ny_pix = 50, 50                 # desired output (pixelated) resolution
 Nx_hi,  Ny_hi  = os * Nx_pix, os * Ny_pix  # high-res ray grid
 
 xmin, xmax = -2.0, 2.0
@@ -185,111 +185,14 @@ function add_halfplane_to_sourceplot!(p, βstar::SVector{2,Float64}, n::SVector{
     return p
 end
 
-# --- helper: block-mean downsampling for display purposes ---
-function block_mean(A::AbstractMatrix{<:Real}, os::Int)
-    Ny_hi, Nx_hi = size(A)
-    @assert Nx_hi % os == 0 "Nx_hi=$(Nx_hi) is not divisible by os=$(os)"
-    @assert Ny_hi % os == 0 "Ny_hi=$(Ny_hi) is not divisible by os=$(os)"
-    Ny = Ny_hi ÷ os
-    Nx = Nx_hi ÷ os
-    B = Matrix{Float64}(undef, Ny, Nx)
-    inv_os2 = 1.0 / (os * os)
-
-    @inbounds for j in 1:Ny
-        j0 = (j-1)*os + 1
-        for i in 1:Nx
-            i0 = (i-1)*os + 1
-            s = 0.0
-            for jj in j0:j0+os-1, ii in i0:i0+os-1
-                s += A[jj, ii]
-            end
-            B[j,i] = s * inv_os2
-        end
-    end
-    return B
-end
-
-# ---------------------------------------------
-# Observational effects
-# ---------------------------------------------
-"""
-    make_gaussian_psf(σ_θ, pixel_size; truncate=4) -> Matrix{Float64}
-
-Build a normalised 2-D Gaussian PSF kernel.
-  σ_θ        : standard deviation in the same angular units as the θ grid
-  pixel_size : angular size of one output pixel (xmax-xmin)/(Nx_pix-1)
-  truncate   : kernel half-width in units of σ (default 4σ)
-The kernel is normalised to sum to 1 so total flux is conserved.
-"""
-function make_gaussian_psf(σ_θ::Float64, pixel_size::Float64; truncate::Int=4)
-    σ_pix = σ_θ / pixel_size                          # σ in pixel units
-    half  = ceil(Int, truncate * σ_pix)
-    sz    = 2*half + 1
-    K     = Matrix{Float64}(undef, sz, sz)
-    for j in 1:sz, i in 1:sz
-        dx = i - half - 1
-        dy = j - half - 1
-        K[j, i] = exp(-0.5*(dx^2 + dy^2) / σ_pix^2)
-    end
-    return K ./ sum(K)
-end
-
-"""
-    apply_psf(I, psf_kernel) -> Matrix{Float64}
-
-Convolve intensity map I with psf_kernel using linear (zero-padded) convolution,
-then crop back to the original size so the output is centred correctly.
-"""
-function apply_psf(I::Matrix{Float64}, K::Matrix{Float64})
-    Ny, Nx     = size(I)
-    Ky, Kx     = size(K)
-    half_y     = Ky ÷ 2
-    half_x     = Kx ÷ 2
-    C          = conv(I, K)                            # DSP.conv: full convolution
-    # crop to original size (centred)
-    return C[half_y+1 : half_y+Ny, half_x+1 : half_x+Nx]
-end
-
-
-"""
-    add_sky_background(I, sky_level) -> Matrix{Float64}
-
-Add a uniform sky background (in the same flux units as I).
-"""
-add_sky_background(I::Matrix{Float64}, sky::Float64) = I .+ sky
-
-"""
-    add_poisson_noise(I, rng) -> Matrix{Float64}
-
-Add Poisson shot noise. I is treated as a photon count map; each pixel is
-drawn from Poisson(λ = I[j,i]).  Negative values (from background subtraction)
-are clamped to zero before sampling.
-"""
-function add_poisson_noise(I::Matrix{Float64}, rng::AbstractRNG)
-    out = similar(I)
-    for k in eachindex(I)
-        λ = max(I[k], 0.0)
-        out[k] = Float64(rand(rng, Poisson(λ)))
-    end
-    return out
-end
-
-"""
-    add_read_noise(I, σ_read, rng) -> Matrix{Float64}
-
-Add Gaussian read-out noise with standard deviation σ_read (in flux units).
-"""
-function add_read_noise(I::Matrix{Float64}, σ_read::Float64, rng::AbstractRNG)
-    return I .+ σ_read .* randn(rng, size(I))
-end
-
-
 #---generate ray-shooting intensity map and plot with caustics/critical curves ---
 
 I_hi  = ray_shoot_intensity_map(lens, src, xs_hi, ys_hi)
 I_pix = block_mean(I_hi, os)
 
-# --- build observed image pipeline ---
+# ---------------------------------------------
+# Observational effects
+# ---------------------------------------------
 psf_kernel = make_gaussian_psf(psf_σ_θ, pixel_size)
 println("PSF kernel size: $(size(psf_kernel)), σ = $(psf_σ_θ) θ-units = $(psf_σ_θ/pixel_size) pixels")
 
@@ -300,6 +203,10 @@ I_cnt  = I_sky .* flux_scale                                   # 3. scale to cou
 rng    = MersenneTwister(obs_seed)
 I_shot = add_poisson_noise(I_cnt,  rng)                       # 4. Poisson shot noise
 I_obs  = add_read_noise(I_shot, σ_read, rng)                  # 5. Gaussian read noise
+
+# --------------------------------------------
+# Plotting
+# --------------------------------------------
 
 # log-stretch for display (guard against ≤0 after noise)
 log_stretch(A) = log10.(max.(A, 1.0))
@@ -313,6 +220,10 @@ p_lens_hi = heatmap(xs_hi, ys_hi, log10.(I_hi .+ 1e-12);  # log for display
     title="Lens plane: high-res",
     colorbar=false, legend=false
 )
+
+for poly in critical_polylines
+    plot!(p_lens_hi, first.(poly), last.(poly); lw=2, linecolor=:white)
+end
 
 p_lens = heatmap(xs_pix, ys_pix, Iplot;
     aspect_ratio=:equal,

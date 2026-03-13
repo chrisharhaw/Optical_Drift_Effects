@@ -5,9 +5,11 @@ using LinearAlgebra
 using StaticArrays
 
 # -------------------------
-# 1) Types + interfaces
+# 1) Types + Utils + interfaces
 # -------------------------
 include("Types.jl")
+include("Utils/Mesh.jl")
+export block_mean
 
 # -------------------------
 # 2) Lens models
@@ -15,9 +17,6 @@ include("Types.jl")
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 export generic_cusp, generic_fold, potential, deflection, deflection_jacobian
-
-# export SIS, SIE
-# export deflection, deflection_jacobian
 
 # -------------------------
 # 3) Source models
@@ -35,10 +34,17 @@ include("Caustics/CausticCurves.jl")
 export critical_curves, caustic_curves
 
 # -------------------------
+# 5) Observational effects
+# -------------------------
+include("Observation/PSF.jl")
+include("Observation/Detector.jl")
+export apply_psf, make_gaussian_psf, add_sky_background, add_poisson_noise, add_read_noise
+
+# -------------------------
 # 3) Public API exports
 # -------------------------
 # Types
-export AbstractLensModel, AbstractSourceModel, AbstractLocalMap
-export LensGeometry, GridConfig, SolverConfig, ObservationConfig, RenderConfig, LensingResult
+export AbstractLensModel, AbstractSourceModel
+# export LensGeometry, GridConfig, SolverConfig, ObservationConfig, RenderConfig, LensingResult
 
 end # module
