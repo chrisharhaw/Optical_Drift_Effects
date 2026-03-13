@@ -17,7 +17,8 @@ export block_mean
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 include("Lenses/GaudiPetters_cusp.jl")
-export generic_cusp, generic_fold, GaudiPetters_cusp, potential, deflection, deflection_jacobian
+include("Lenses/GaudiPetters_fold.jl")
+export generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potential, deflection, deflection_jacobian
 
 # -------------------------
 # 3) Source models
