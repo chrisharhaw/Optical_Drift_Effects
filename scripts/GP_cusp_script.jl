@@ -1,20 +1,33 @@
-# scripts/checkerboard_lensing.jl
+# scripts/GP_cusp_script.jl
 using Optical_Drift_Effects
 using StaticArrays
 using LinearAlgebra
 using Plots
+using Contour
 
 # -----------------------------
 # Lens set-up
 # -----------------------------
-# d=1, e=1 
-lens = generic_cusp(1, 1)   # <-- change this line to your lens object / parameters 
+# a=1.69, b=2.45, c=2.0
+a= 1.69 
+b= 2.45 
+c= 2.0 *1.2
+
+lens = GaudiPetters_cusp(a, b, c)   # <-- change this line to your lens object / parameters
 
 # ------------------------------
 # Source set-up
 # ------------------------------
 cell_size = 0.2
-src = CheckerboardSource(cell_size=cell_size, ϕ = 0.0 , hue_gradient=true, x_range=(-2.0, 2.0))
+src = CheckerboardSource(
+    cell_size      = cell_size,
+    ϕ              = 0.0,
+    split_gradient = true,        # red tiles: vertical hue; blue tiles: horizontal hue
+    x_range        = (-2.0, 2.0), # horizontal ramp range  (blue/parity-1 tiles)
+    y_range        = (-2.0, 2.0), # vertical ramp range    (red/parity-0 tiles)
+    window_size    = 0.0,
+)
+ 
 
 # -----------------------------
 # Grid settings
@@ -41,21 +54,32 @@ ys_pix = range(ymin, ymax; length=Ny_pix)
 # lensing functions at a point (wrapper for your lens functions)
 # ---------------------------------------------             
 deflection_at(lens, θ) = deflection(lens, θ)               # returns SVector(αx, αy)
-jacobian_at(lens, θ) = deflection_jacobian(lens, θ)        # returns 2x2 (SMatrix ok)
 
 
 # ---------------------------------------------
 #  Critical curves: find det(J)=0 contours in image plane
 # ---------------------------------------------
 critical_polylines = critical_curves(lens, xs_hi, ys_hi)
-caustic_polylines = caustic_curves(lens, critical_polylines)
+
+function caustic_curves_GP(lens, critical_polylines)
+    caustic_polylines = Vector{Vector{SVector{2,Float64}}}()
+
+    for poly in critical_polylines
+        mapped = [deflection(lens, θ) for θ in poly]
+        push!(caustic_polylines, mapped)
+    end
+
+    return caustic_polylines
+end
+
+caustic_polylines = caustic_curves_GP(lens, critical_polylines)
 
 # ---------------------------------------------
 # Ray-shooting approach for extended sources
 # ---------------------------------------------
 
-# lens equation mapping θ -> β
-β_from_θ(lens, θ::SVector{2,Float64}) = θ - deflection_at(lens, θ)
+    # # lens equation mapping θ -> β
+    # β_from_θ(lens, θ::SVector{2,Float64}) = θ - deflection_at(lens, θ)
 
 """
 Return image-plane intensity map I(θ) on a grid (xcent × ycent).
@@ -71,13 +95,12 @@ function ray_shoot_intensity_map(lens, src, xs, ys)
         for i in 1:Nx
             x = xs[i]
             θ = SVector{2,Float64}(x, y)
-            β = β_from_θ(lens, θ)
+            β = deflection_at(lens, θ)
             I[j, i] = float(intensity(src, β))
         end
     end
     return I
 end
-
 
 #---generate ray-shooting intensity map and plot with caustics/critical curves ---
 
@@ -114,8 +137,8 @@ for poly in caustic_polylines
     plot!(p_src, first.(poly), last.(poly); lw=2, linecolor=:cyan)
 end
 
-p_overlay = plot(p_lens, p_src; layout=(1,2), size=(1200, 600), left_margin=12Plots.mm, right_margin=6Plots.mm,
+p_overlay = plot(p_lens, p_src; layout=(1,2), title="GP cusp a=$(a), b=$(b), c=$(c)", size=(1600, 800), left_margin=12Plots.mm, right_margin=6Plots.mm,
     top_margin=6Plots.mm,   bottom_margin=12Plots.mm)
 
-savefig(p_overlay, "checkerboard_horizontalHue.png")
-println("Saved: checkerboard.png")
+savefig(p_overlay, "GP_cusp_a=$(a)_b=$(b)_c=$(c).png")
+println("Saved: GP_cusp_a=$(a)_b=$(b)_c=$(c).png")

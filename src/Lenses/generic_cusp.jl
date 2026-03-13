@@ -4,8 +4,6 @@ using LinearAlgebra
 using StaticArrays
 using ForwardDiff
 
-export generic_cusp, deflection, deflection_jacobian
-
 struct generic_cusp <: AbstractLensModel
     d::Int64
     e::Int64
@@ -60,7 +58,7 @@ end
 """
     deflection_jacobian(lens::generic_cusp, θ::SVector{2,Float64}) -> SMatrix{2,2,Float64}
 
-Returns ∂α_i/∂θ_j for generic_cusp.
+Returns A = I - ∂α/∂θ for generic_cusp.
 """
 function deflection_jacobian(lens::generic_cusp, θ::SVector{2,Float64})::SMatrix{2,2,Float64}
     d = lens.d
