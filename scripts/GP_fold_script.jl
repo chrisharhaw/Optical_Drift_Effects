@@ -12,10 +12,10 @@ using Contour
 # --------------------------
 # Setting up the lens
 # --------------------------
-a = 1.8
-b = 0.
-c = -0.
-d = 2.0
+a = 5.8
+b = -0.5
+c = -0.0
+d = 6.0
 
 lens = GaudiPetters_fold(a, b, c, d)
 
@@ -24,15 +24,22 @@ lens = GaudiPetters_fold(a, b, c, d)
 # -------------------------
 
 cell_size = 0.2
-src = CheckerboardSource(
-    cell_size      = cell_size,
+# src = CheckerboardSource(
+#     cell_size      = cell_size,
+#     ϕ              = 0.0,
+#     split_gradient = true,        # red tiles: vertical hue; blue tiles: horizontal hue
+#     x_range        = (-2.0, 2.0), # horizontal ramp range  (blue/parity-1 tiles)
+#     y_range        = (-2.0, 2.0), # vertical ramp range    (red/parity-0 tiles)
+#     window_size    = 0.0
+# )
+ 
+src = StripesSource(
+    stripe_width      = cell_size,
     ϕ              = 0.0,
-    split_gradient = true,        # red tiles: vertical hue; blue tiles: horizontal hue
     x_range        = (-2.0, 2.0), # horizontal ramp range  (blue/parity-1 tiles)
     y_range        = (-2.0, 2.0), # vertical ramp range    (red/parity-0 tiles)
     window_size    = 0.0
 )
- 
 
 
 # -----------------------------

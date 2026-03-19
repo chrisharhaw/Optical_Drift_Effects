@@ -26,7 +26,8 @@ export generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potenti
 include("Sources/Sersic.jl")
 include("Sources/halfPlane.jl")
 include("Sources/checkerboard.jl")
-export SersicSource, HalfPlaneSource, CheckerboardSource, intensity, sersic_b
+include("Sources/Stripes.jl")
+export SersicSource, HalfPlaneSource, CheckerboardSource, StripesSource, intensity, sersic_b
 
 # -------------------------
 # 4) Critical curves and caustics
