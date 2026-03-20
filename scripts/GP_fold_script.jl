@@ -12,10 +12,10 @@ using Contour
 # --------------------------
 # Setting up the lens
 # --------------------------
-a = 5.8
+a = 2.8
 b = -0.5
-c = -0.2
-d = 6.0
+c = 0.8
+d = 2.0
 
 lens = GaudiPetters_fold(a, b, c, d)
 
@@ -35,7 +35,7 @@ stripe_width = 2.
  
 src = StripesSource(
     stripe_width    = stripe_width,
-    ϕ              = 0. * π,
+    ϕ              = 0.05 * π,
     x_range        = (-10.0, 10.0), # horizontal ramp range  (blue/parity-1 tiles)
     y_range        = (-10.0, 10.0), # vertical ramp range    (red/parity-0 tiles),
     hue_gradient   = true,
