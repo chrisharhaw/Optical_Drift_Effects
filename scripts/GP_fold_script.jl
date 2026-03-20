@@ -14,7 +14,7 @@ using Contour
 # --------------------------
 a = 5.8
 b = -0.5
-c = -0.0
+c = -0.2
 d = 6.0
 
 lens = GaudiPetters_fold(a, b, c, d)
@@ -23,7 +23,7 @@ lens = GaudiPetters_fold(a, b, c, d)
 # Source set-up
 # -------------------------
 
-cell_size = 0.2
+stripe_width = 2.
 # src = CheckerboardSource(
 #     cell_size      = cell_size,
 #     ϕ              = 0.0,
@@ -34,10 +34,11 @@ cell_size = 0.2
 # )
  
 src = StripesSource(
-    stripe_width      = cell_size,
-    ϕ              = 0.0,
-    x_range        = (-2.0, 2.0), # horizontal ramp range  (blue/parity-1 tiles)
-    y_range        = (-2.0, 2.0), # vertical ramp range    (red/parity-0 tiles)
+    stripe_width    = stripe_width,
+    ϕ              = 0. * π,
+    x_range        = (-10.0, 10.0), # horizontal ramp range  (blue/parity-1 tiles)
+    y_range        = (-10.0, 10.0), # vertical ramp range    (red/parity-0 tiles),
+    hue_gradient   = true,
     window_size    = 0.0
 )
 
@@ -46,6 +47,7 @@ src = StripesSource(
 # Grid settings
 # -----------------------------
 
+# --- The lens plane ---
 os = 5           # oversampling factor (pixels per output pixel, per axis)
 
 Nx_pix, Ny_pix = 200, 200                 # desired output (pixelated) resolution
@@ -53,6 +55,12 @@ Nx_hi,  Ny_hi  = os * Nx_pix, os * Ny_pix  # high-res ray grid
 
 xmin, xmax = -2.0, 2.0
 ymin, ymax = -2.0, 2.0
+
+# --- The source plane grid ---
+xmin_src, xmax_src = -10.0, 10.0
+ymin_src, ymax_src = -10.0, 10.0
+
+Nx_pix_src, Ny_pix_src = 400, 400   # Output resolution (for plot axes)
 
 # High-res ray grid 
 xs_hi = range(xmin, xmax; length=Nx_hi)
@@ -131,8 +139,8 @@ for poly in critical_polylines
     plot!(p_lens, first.(poly), last.(poly); lw=2, linecolor=:cyan)
 end
 
-xs_src = range(xmin, xmax; length=Nx_pix)
-ys_src = range(ymin, ymax; length=Ny_pix)
+xs_src = range(xmin_src, xmax_src; length=Nx_pix_src)
+ys_src = range(ymin_src, ymax_src; length=Ny_pix_src)
 
 I_src_map = [intensity(src, SVector{2,Float64}(x, y))
              for y in ys_src, x in xs_src]   # (Ny × Nx), matching heatmap layout

@@ -31,6 +31,7 @@ struct StripesSource <: AbstractSourceModel
     ϕ               :: Float64
     window_size     :: Float64
     window_power    :: Float64
+    hue_gradient    :: Bool
     x_range         :: SVector{2, Float64}
     y_range         :: SVector{2, Float64}
     dark_fraction   :: Float64
@@ -38,13 +39,14 @@ end
 
 
 function StripesSource(;
-    stripe_width    :: Real = 0.1,
+    stripe_width    :: Real = 8.,
     I_hi            :: Real = 1.,
     I_lo            :: Real = 0.,
     β0                      = (0., 0.),
     ϕ               :: Real = 0.,
     window_size     :: Real = 0.0,
     window_power    :: Real = 10.0,
+    hue_gradient    :: Bool = false,
     x_range                 = nothing,
     y_range                 = nothing,
     dark_fraction   :: Real = 0.5
@@ -67,6 +69,7 @@ function StripesSource(;
         float(ϕ),
         float(window_size),
         float(window_power),
+        hue_gradient,
         xr, yr,
         float(dark_fraction),
     )
@@ -95,8 +98,19 @@ function intensity(src::StripesSource, β::SVector{2, T}) where T<:Number
     xy = _cb_rotate(T(src.ϕ), d)  
     sw = T(src.stripe_width)
    
-    parity = floor(Int, xy[2] / sw) & 1      # floor(Int, x / sw) & 1 could be a faster alternative
+    parity = floor(Int, xy[2] / sw) & 1      # floor(Int, x / sw) % 2 could be a somewhat slower alternative
 
+# --- Hue gradient (slightly different) ---
+    # if src.hue_gradient
+    #     q = clamp((xy[2] - src.x_range[1]) / (src.x_range[2] - src.x_range[1]), zero(T), one(T))
+    #     return parity == 1 ? q * src.dark_fraction : q
+    # end
+    if src.hue_gradient
+        q = clamp((xy[2] - src.x_range[1]) / (src.x_range[2] - src.x_range[1]), zero(T), one(T))
+        return parity == 0 ? q * src.dark_fraction : src.dark_fraction + q * (1. - src.dark_fraction)
+    end
+
+# --- No hue gradient ---
     return parity == 1 ? 1. : src.dark_fraction 
 end
 
