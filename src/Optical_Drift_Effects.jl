@@ -14,11 +14,13 @@ export block_mean
 # -------------------------
 # 2) Lens models
 # -------------------------
+include("Lenses/SIE.jl")
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 include("Lenses/GaudiPetters_cusp.jl")
 include("Lenses/GaudiPetters_fold.jl")
-export generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potential, deflection, deflection_jacobian
+export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potential, deflection, deflection_jacobian
+
 
 # -------------------------
 # 3) Source models

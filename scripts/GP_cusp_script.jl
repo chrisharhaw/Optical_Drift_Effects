@@ -11,7 +11,7 @@ using Contour
 # a=1.69, b=2.45, c=2.0
 a= 1.69 
 b= 2.45 
-c= 2.0 *1.2
+c= 2.0 *1.5
 
 lens = GaudiPetters_cusp(a, b, c)   # <-- change this line to your lens object / parameters
 
@@ -35,7 +35,7 @@ src = CheckerboardSource(
 
 os = 5           # oversampling factor (pixels per output pixel, per axis)
 
-Nx_pix, Ny_pix = 200, 200                 # desired output (pixelated) resolution
+Nx_pix, Ny_pix = 400, 400                 # desired output (pixelated) resolution
 Nx_hi,  Ny_hi  = os * Nx_pix, os * Ny_pix  # high-res ray grid
 
 xmin, xmax = -2.0, 2.0
@@ -140,5 +140,5 @@ end
 p_overlay = plot(p_lens, p_src; layout=(1,2), title="GP cusp a=$(a), b=$(b), c=$(c)", size=(1600, 800), left_margin=12Plots.mm, right_margin=6Plots.mm,
     top_margin=6Plots.mm,   bottom_margin=12Plots.mm)
 
-savefig(p_overlay, "GP_cusp_a=$(a)_b=$(b)_c=$(c).png")
-println("Saved: GP_cusp_a=$(a)_b=$(b)_c=$(c).png")
+savefig(p_overlay, "plots/GP_cusp_a=$(a)_b=$(b)_c=$(c).png")
+println("Saved: plots/GP_cusp_a=$(a)_b=$(b)_c=$(c).png")
