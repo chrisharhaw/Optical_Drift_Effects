@@ -9,18 +9,10 @@
 #
 # Notes:
 # - Coordinates are assumed to be in the same angular units everywhere (e.g. arcsec or radians).
-# - The implementation below uses the commonly-used closed-form SIE deflection expressions
-#   (often attributed to Kormann et al. 1994 / Keeton "gravlens" conventions).
-# - Derivatives are computed robustly via ForwardDiff to avoid algebraic mistakes.
 # - A safe SIS-like limit is used when q ≈ 1.
-#
-# You can later swap in an analytic Jacobian for speed if you want.
-
-
 
 using LinearAlgebra
 using StaticArrays
-using ForwardDiff
 
 export SIE, deflection, deflection_jacobian
 
@@ -49,7 +41,7 @@ struct SIE <: AbstractLensModel
     eps_r::Float64
 end
 
-function SIE(θE::Real, q::Real, φ::Real, x0::Real=0.0, y0::Real=0.0; eps_q=1e-6, eps_r=1e-12)
+function SIE(θE::Real, q::Real, φ::Real=0.0, x0::Real=0.0, y0::Real=0.0; eps_q=1e-6, eps_r=1e-12)
     qf = float(q)
     if !(0.0 < qf <= 1.0)
         throw(ArgumentError("SIE requires 0 < q ≤ 1, got q=$q"))
@@ -103,53 +95,51 @@ function deflection(lens::SIE, θ::SVector{2,Float64})::SVector{2,Float64}
         return from_lens_frame(lens, @SVector [ax, ay])
     end
 
-    # Ellipticity parameter
-    e = sqrt(1.0 - q*q)  # 0<e<1
+    denom = sqrt(x^2 + (y/q)^2) 
+    ax = b * x / denom
+    ay = b * (y/q^2) / denom
 
-    # Common auxiliary quantity
-    ψ = sqrt(q*q * x*x + y*y) + lens.eps_r
-
-    # Closed-form deflection (one standard convention)
-    #
-    # αx' = b / e * atan( e x / (ψ + q) )
-    # αy' = b / e * atanh( e y / (ψ + q) )
-    #
-    # Some references write b*q/e prefactors instead. If you find mismatches in the
-    # Einstein radius normalization, adjust b or include a factor of q consistently.
-    #
-    denom = ψ + q
-
-    ax = (b / e) * atan( (e * x) / denom )
-    ay = (b / e) * atanh( (e * y) / denom )
-
-    #This equation for the deflection angle is different to the one from Petters, Levine, Wambsganss (2001) 
-    #need to investigate further by comparison to Lenstronomy and K+K94. 
     return from_lens_frame(lens, @SVector [ax, ay])
 end
 
 # --- Lensing Potential ---------------------------------------------------------
+"""
+    potential(lens::SIE, θ::SVector{2,Float64}) -> Float64
 
+Returns lensing potential ψ(θ).
+The potential is defined such that α = ∇ψ. For SIE, the potential can be computed via a closed-form expression.
+"""
+function potential(lens::SIE, θ::SVector{2,Float64})::Float64
+    # Lens-frame coordinates (x, y)
+    xy = to_lens_frame(lens, θ)
+    x = xy[1]; y = xy[2]
+    q  = lens.q
+    b  = lens.θE
 
+    pot = b * sqrt(x^2 + (y/q)^2)
+    return pot
+end
 
 # --- Jacobian via AD ---------------------------------------------------------
-
 """
     deflection_jacobian(lens::SIE, θ::SVector{2,Float64}) -> SMatrix{2,2,Float64}
 
-Returns ∂α_i/∂θ_j evaluated at θ.
+Returns ∂beta_i/∂θ_j evaluated at θ.
 
-Uses ForwardDiff for robustness. If/when you want speed, replace with an analytic form.
 """
 function deflection_jacobian(lens::SIE, θ::SVector{2,Float64})::SMatrix{2,2,Float64}
-    # ForwardDiff works most smoothly with ordinary vectors.
-    f(v) = begin
-        θv = @SVector [v[1], v[2]]
-        a  = deflection(lens, θv)
-        return SVector{2,Float64}(a[1], a[2])
-    end
+    xy = to_lens_frame(lens, θ)
+    x = xy[1]; y = xy[2]
+    q  = lens.q
+    b  = lens.θE
 
-    J = ForwardDiff.jacobian(f, Vector{Float64}([θ[1], θ[2]]))  # 2x2 Matrix
-    return SMatrix{2,2,Float64}(J)
+    J11 = 1 - b * y^2 / (q^2 * (x^2 + (y/q)^2)^(3/2))
+    J22 = 1 - b * x^2 / (q^2 * ((x^2 + (y/q)^2)^(3/2)))
+    J12 = -b * x * y / (q^2 * (x^2 + (y/q)^2)^(3/2))
+    J_lens = @SMatrix [J11  J12;
+                       J12  J22]
+
+    return SMatrix{2,2,Float64}(J_lens)
 end
 
 
