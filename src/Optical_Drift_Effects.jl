@@ -18,7 +18,7 @@ include("Lenses/SIE.jl")
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 include("Lenses/GaudiPetters_cusp.jl")
-export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, potential, deflection, deflection_jacobian
+export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, potential, deflection, deflection_jacobian, third_derivatives
 
 # -------------------------
 # 3) Source models
@@ -36,14 +36,20 @@ include("Caustics/CausticCurves.jl")
 export critical_curves, caustic_curves
 
 # -------------------------
-# 5) Observational effects
+# 5) Mapping
+# -------------------------
+include("Mapping/LocalMap.jl")
+export ckn_M, classify_caustic_polyline, fold_Psi
+
+# -------------------------
+# 6) Observational effects
 # -------------------------
 include("Observation/PSF.jl")
 include("Observation/Detector.jl")
 export apply_psf, make_gaussian_psf, add_sky_background, add_poisson_noise, add_read_noise
 
 # -------------------------
-# 3) Public API exports
+# 7) Public API exports
 # -------------------------
 # Types
 export AbstractLensModel, AbstractSourceModel
