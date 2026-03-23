@@ -142,4 +142,33 @@ function deflection_jacobian(lens::SIE, θ::SVector{2,Float64})::SMatrix{2,2,Flo
     return SMatrix{2,2,Float64}(J_lens)
 end
 
+# --- Third Derivatives ------------------------------------------------------
+"""
+    third_derivatives(lens::SIE, theta::SVector{2,Float64})
+
+Returns the third derivatives of the lensing potential.
+
+"""
+
+function third_derivatives(lens::SIE, theta::SVector{2,Float64})
+    # Work in lens frame (handles phi != 0 correctly)
+    x1, x2 = lens.x0 == 0.0 && lens.y0 == 0.0 && lens.φ == 0.0 ?
+              (theta[1], theta[2]) :
+              let xy = SVector(cos(-lens.φ)*(theta[1]-lens.x0) - sin(-lens.φ)*(theta[2]-lens.y0),
+                               sin(-lens.φ)*(theta[1]-lens.x0) + cos(-lens.φ)*(theta[2]-lens.y0))
+                  (xy[1], xy[2])
+              end
+    b_sie = lens.θE
+    q     = lens.q
+    xi    = sqrt(x1^2 + x2^2 / q^2)
+    fac   = b_sie / (q^2 * xi^5)
+    q2xi2 = q^2 * xi^2
+    psi111 = -3fac * x1 * x2^2
+    psi112 =  fac * x2 * (2q2xi2 - 3x2^2) / q^2
+    psi122 =  fac * x1 * (3x2^2 - q2xi2)  / q^2
+    psi222 = -3fac * x1^2 * x2             / q^2
+    return (psi111, psi112, psi122, psi222)
+end
+
+
 
