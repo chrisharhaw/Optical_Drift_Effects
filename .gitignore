@@ -31,3 +31,19 @@ JuliaLocalPreferences.toml
 *.pdf
 *.gif
 *.png
+
+# Python-specific files
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.ipynb_checkpoints/
+
+# --- OS/IDE General ---
+.DS_Store
+.vscode/
+.idea/
+
