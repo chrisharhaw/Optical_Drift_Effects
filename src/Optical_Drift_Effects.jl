@@ -18,7 +18,9 @@ include("Lenses/SIE.jl")
 include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 include("Lenses/GaudiPetters_cusp.jl")
-export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, potential, deflection, deflection_jacobian, third_derivatives
+include("Lenses/GaudiPetters_fold.jl")
+export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potential, deflection, deflection_jacobian
+
 
 # -------------------------
 # 3) Source models
@@ -26,7 +28,8 @@ export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, potential, deflection
 include("Sources/Sersic.jl")
 include("Sources/halfPlane.jl")
 include("Sources/checkerboard.jl")
-export SersicSource, HalfPlaneSource, CheckerboardSource, intensity, sersic_b
+include("Sources/Stripes.jl")
+export SersicSource, HalfPlaneSource, CheckerboardSource, StripesSource, intensity, sersic_b
 
 # -------------------------
 # 4) Critical curves and caustics
