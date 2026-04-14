@@ -19,7 +19,7 @@ include("Lenses/generic_cusp.jl")
 include("Lenses/generic_fold.jl")
 include("Lenses/GaudiPetters_cusp.jl")
 include("Lenses/GaudiPetters_fold.jl")
-export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, potential, deflection, deflection_jacobian
+export SIE, generic_cusp, generic_fold, GaudiPetters_cusp, GaudiPetters_fold, deflection, deflection_jacobian
 
 
 # -------------------------
@@ -42,7 +42,8 @@ export critical_curves, caustic_curves
 # 5) Mapping
 # -------------------------
 include("Mapping/LocalMap.jl")
-export ckn_M, classify_caustic_polyline, fold_Psi
+include("Mapping/ray_shooting.jl")
+export ray_shoot_intensity_map, ckn_M, classify_caustic_polyline, fold_Psi
 
 # -------------------------
 # 6) Observational effects
@@ -57,5 +58,11 @@ export apply_psf, make_gaussian_psf, add_sky_background, add_poisson_noise, add_
 # Types
 export AbstractLensModel, AbstractSourceModel
 # export LensGeometry, GridConfig, SolverConfig, ObservationConfig, RenderConfig, LensingResult
+
+# -------------------------
+# 8) Animation utilities
+# -------------------------
+include("Utils/animation.jl")
+export  run_animation
 
 end # module
