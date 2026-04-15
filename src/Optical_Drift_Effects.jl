@@ -9,7 +9,9 @@ using StaticArrays
 # -------------------------
 include("Types.jl")
 include("Utils/Mesh.jl")
-export block_mean
+export block_mean, detector_grid
+export NIRCAM_LW_PIXEL_ARCSEC, NIRCAM_SW_PIXEL_ARCSEC,
+       HST_ACS_WFC_PIXEL_ARCSEC, EUCLID_VIS_PIXEL_ARCSEC
 
 # -------------------------
 # 2) Lens models
