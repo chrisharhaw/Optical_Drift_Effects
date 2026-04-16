@@ -13,8 +13,95 @@
 
 using LinearAlgebra
 using StaticArrays
+using Cosmology
 
 export SIE, deflection, deflection_jacobian
+export sie_einstein_radius, SIE_from_vel_disp
+
+# ============================================================================
+# Einstein radius from physical parameters
+# ============================================================================
+ 
+"""
+    sie_einstein_radius(σ_v, z_l, z_s; cosmo=_default_cosmology()) -> Float64
+ 
+Compute the SIE Einstein radius θ_E in **arcseconds** from:
+ 
+  - `σ_v`  : velocity dispersion of the lens in km/s
+  - `z_l`  : lens redshift
+  - `z_s`  : source redshift
+  - `cosmo`: a Cosmology.jl cosmology object (default: flat ΛCDM, Planck 2018)
+ 
+Formula (SIS / SIE):
+ 
+    θ_E = 4π (σ_v/c)² · D_ls / D_s     [radians]
+ 
+where D_ls and D_s are angular diameter distances.
+ 
+References: Kochanek (2006), Bartelmann & Schneider (2001).
+"""
+function sie_einstein_radius(σ_v::Real, z_l::Real, z_s::Real;
+                             cosmo=_default_cosmology())
+    z_l >= z_s && throw(ArgumentError(
+        "Lens redshift z_l=$z_l must be less than source redshift z_s=$z_s"))
+ 
+    c_km_s = 2.99792458e5   # speed of light in km/s
+ 
+    D_s  = angular_diameter_dist_z(cosmo, z_s)    # Mpc
+    D_ls = angular_diameter_dist_ls(cosmo, z_l, z_s)  # Mpc
+ 
+    # θ_E in radians
+    θE_rad = 4π * (σ_v / c_km_s)^2 * (D_ls / D_s)
+ 
+    # Convert to arcseconds
+    θE_arcsec = rad2deg(θE_rad) * 3600.0
+    return θE_arcsec
+end
+
+# ============================================================================
+# Convenience constructor: build SIE from physical parameters
+# ============================================================================
+ 
+"""
+    SIE_from_vel_disp(σ_v, z_l, z_s, q, φ=0.0, x0=0.0, y0=0.0;
+                      cosmo=_default_cosmology(),
+                      eps_q=1e-6, eps_r=1e-12) -> SIE
+ 
+Construct an SIE lens from physical parameters.  The Einstein radius is
+computed from angular diameter distances via `sie_einstein_radius`, and all
+spatial coordinates (x0, y0) are assumed to be in the same arcsecond units
+as θ_E.
+ 
+Arguments:
+  - `σ_v`  : lens velocity dispersion [km/s]
+  - `z_l`  : lens redshift
+  - `z_s`  : source redshift
+  - `q`    : axis ratio (0 < q ≤ 1)
+  - `φ`    : position angle [radians], default 0.0
+  - `x0,y0`: lens centre position [arcsec], default (0, 0)
+  - `cosmo`: Cosmology.jl cosmology (default: flat ΛCDM Planck 2018)
+ 
+Returns an SIE struct with θE set in arcseconds.
+ 
+# Example
+```julia
+cosmo = cosmology(h=0.70, OmegaM=0.30)   # custom cosmology
+lens  = SIE_from_vel_disp(230.0, 0.5, 2.0, 0.8; cosmo=cosmo)
+println("θ_E = \$(lens.θE) arcsec")
+```
+"""
+function SIE_from_vel_disp(σ_v::Real, z_l::Real, z_s::Real,
+                           q::Real, φ::Real=0.0,
+                           x0::Real=0.0, y0::Real=0.0;
+                           cosmo=_default_cosmology(),
+                           eps_q=1e-6, eps_r=1e-12)
+    θE = sie_einstein_radius(σ_v, z_l, z_s; cosmo=cosmo)
+    return SIE(θE, q, φ, x0, y0; eps_q=eps_q, eps_r=eps_r)
+end
+
+# ============================================================================
+# SIE lens model
+# ============================================================================
 
 """
     SIE(θE, q, φ, x0, y0; eps_q=1e-6, eps_r=1e-12)
