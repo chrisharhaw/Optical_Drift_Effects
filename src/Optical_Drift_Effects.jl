@@ -9,7 +9,9 @@ using StaticArrays
 # -------------------------
 include("Types.jl")
 include("Utils/Mesh.jl")
-export block_mean
+export block_mean, detector_grid
+export NIRCAM_LW_PIXEL_ARCSEC, NIRCAM_SW_PIXEL_ARCSEC,
+       HST_ACS_WFC_PIXEL_ARCSEC, EUCLID_VIS_PIXEL_ARCSEC
 
 # -------------------------
 # 2) Lens models
@@ -53,14 +55,22 @@ include("Observation/Detector.jl")
 export apply_psf, make_gaussian_psf, add_sky_background, add_poisson_noise, add_read_noise
 
 # -------------------------
-# 7) Public API exports
+# 7) Cosmology helpers
+# -------------------------
+using Unitful: ustrip
+using Cosmology: cosmology, angular_diameter_dist
+include("Utils/cosmolgy_helper.jl")
+export _default_cosmology, angular_diameter_dist_ls, angular_diameter_dist_z, physical_to_angular_size, lens_angular_velocity
+
+# -------------------------
+# 8) Public API exports
 # -------------------------
 # Types
 export AbstractLensModel, AbstractSourceModel
 # export LensGeometry, GridConfig, SolverConfig, ObservationConfig, RenderConfig, LensingResult
 
 # -------------------------
-# 8) Animation utilities
+# 9) Animation utilities
 # -------------------------
 include("Utils/animation.jl")
 export  run_animation
