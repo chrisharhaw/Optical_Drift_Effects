@@ -12,7 +12,7 @@ function ray_shoot_intensity_map(lens, src, xs, ys)
     Nx = length(xs)
     Ny = length(ys)
     I  = Matrix{Float64}(undef, Ny, Nx)
-    @inbounds for j in 1:Ny
+    Threads.@threads for j in 1:Ny
         y = ys[j]
         for i in 1:Nx
             θ       = SVector{2,Float64}(xs[i], y)
