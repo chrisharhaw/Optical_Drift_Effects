@@ -31,7 +31,8 @@ include("Sources/Sersic.jl")
 include("Sources/halfPlane.jl")
 include("Sources/checkerboard.jl")
 include("Sources/Stripes.jl")
-export SersicSource, HalfPlaneSource, CheckerboardSource, StripesSource, intensity, sersic_b
+include("Sources/CoredSersic.jl")
+export SersicSource, HalfPlaneSource, CheckerboardSource, StripesSource, CoredSersicSource, intensity, sersic_b
 
 # -------------------------
 # 4) Critical curves and caustics
