@@ -23,7 +23,7 @@ const HALF_SPAN_RS   = 0.5   # path spans ±this many Rs around the fold caustic
 const OS             = 48    # NIRCAM LW oversampling (48 = notebook full precision)
 const ZOOM_HW_ARCSEC = 0.4   # ± arcsec around the fold image pair in the image plane
                               # (increase if fold arc drifts outside this window)
-const ZOOM_CENTRE = (-0.75, 0.65)   # e.g. (θx, θy) in arcsec; or `nothing` for auto-centering on the reference peak
+const ZOOM_CENTRE = (-0.86087, -0.54203)   # e.g. (θx, θy) in arcsec; or `nothing` for auto-centering on the reference peak
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Lens ───────────────────────────────────────────────────────────────────────
@@ -48,13 +48,14 @@ xs_full, ys_full, _, _, _ = detector_grid(
 
 # ── Critical and caustic curves ────────────────────────────────────────────────
 println("Computing critical/caustic curves …")
-xs_cc = range(xmin, xmax; length=1000)
-ys_cc = range(ymin, ymax; length=1000)
+xs_cc = range(xmin, xmax; length=10000)
+ys_cc = range(ymin, ymax; length=10000)
 crits    = critical_curves(lens, xs_cc, ys_cc)
 caustics = caustic_curves(lens, crits)
 
 # ── Drift direction: diagonal (1,-1)/√2 ───────────────────────────────────────
 drift_dir = normalize(SVector(1.0, -1.0))
+drift_dir_perp = SVector(drift_dir[2], -drift_dir[1]) 
 
 # ── Find caustic crossing along diagonal from origin ──────────────────────────
 t_cross = let
@@ -72,6 +73,40 @@ t_cross = let
     end
     best_t
 end
+
+    # const CAUSTIC_CROSS_HINT = SVector(-0.03, 0.03)   
+
+    # t_cross, β_cross_found = let
+    #     best_t    = 0.0
+    #     best_cross = SVector(0.0, 0.0)
+    #     best_dist  = Inf
+
+    #     for poly in caustics
+    #         for i in 1:length(poly)-1
+    #             a = SVector(poly[i][1],   poly[i][2])
+    #             b = SVector(poly[i+1][1], poly[i+1][2])
+
+    #             perp_a = dot(a, drift_dir_perp)
+    #             perp_b = dot(b, drift_dir_perp)
+
+    #             # Edge crosses the drift_dir line if perpendicular components change sign
+    #             if perp_a * perp_b <= 0
+    #                 frac  = perp_a / (perp_a - perp_b)
+    #                 cross = a + frac * (b - a)   # actual caustic point at crossing
+
+    #                 # Select the crossing nearest to the hint, not nearest to origin
+    #                 dist_to_hint = norm(cross - CAUSTIC_CROSS_HINT)
+    #                 if dist_to_hint < best_dist
+    #                     best_dist  = dist_to_hint
+    #                     best_t     = dot(cross, drift_dir)
+    #                     best_cross = cross
+    #                 end
+    #             end
+    #         end
+    #     end
+    #     best_t, best_cross
+    # end
+
 β_cross = t_cross * drift_dir
 @printf("Fold crossing: β = (%.5f, %.5f)\n", β_cross[1], β_cross[2])
 
@@ -81,7 +116,7 @@ N_steps   = round(Int, 2 * half_span / Δβ) + 1
 t_vals    = range(half_span, -half_span; length=N_steps)   # outside → inside
 β_path    = [β_cross + t * drift_dir for t in t_vals]
 
-src_at(β0) = SersicSource(I0=1.0, Re=Rs, n=2, q=0.7, ϕ=0.0, β0=β0)
+src_at(β0) = SersicSource(I0=1.0, Re=Rs, n=0.5, q=0.7, ϕ=0.0, β0=β0)
 
 # ── Phase 1: reference full-grid computation at β_cross ──────────────────────
 # Two ray-shootings at the caustic crossing identify the fold image-pair location.
@@ -133,6 +168,12 @@ yi2 = searchsortedlast( ys_full, θy_pk + ZOOM_HW_ARCSEC)
 xs_zoom = xs_full[xi1:xi2]
 ys_zoom = ys_full[yi1:yi2]
 
+# Pixel area in arcsec² — needed to convert summed intensity to flux units.
+# Both axes share the same spacing from the uniform detector_grid.
+pixel_area = (xs_zoom[2] - xs_zoom[1]) * (ys_zoom[2] - ys_zoom[1])   # arcsec²
+@printf("Pixel area: %.4e arcsec²\n", pixel_area)
+
+
 n_threads  = Threads.nthreads()
 px_zoom    = length(xs_zoom) * length(ys_zoom)
 px_full    = length(xs_full) * length(ys_full)
@@ -150,7 +191,8 @@ t_est_s    = N_steps * 2 * px_zoom / (n_threads * 6e6)
 @printf("  Est. time: %.0f s  (≈ %.1f min)\n\n",      t_est_s, t_est_s / 60)
 
 # ── Phase 3: scan within zoom window ─────────────────────────────────────────
-max_ΔI  = zeros(N_steps)
+    # max_ΔI  = zeros(N_steps)
+int_ΔFlux = zeros(N_steps)  
 t_start = time()
 report_every = max(1, N_steps ÷ 20)
 
@@ -158,7 +200,13 @@ println("Phase 3: scanning $N_steps steps within zoom region …")
 for k in 1:N_steps
     I_now  = ray_shoot_intensity_map(lens, src_at(β_path[k]),                  xs_zoom, ys_zoom)
     I_10yr = ray_shoot_intensity_map(lens, src_at(β_path[k] + Δβ * drift_dir), xs_zoom, ys_zoom)
-    max_ΔI[k] = maximum(abs.(I_10yr .- I_now))
+
+    # Signed integrated flux change over the zoom window.
+    # The sum is multiplied by pixel_area to give arcsec² units.
+    int_ΔFlux[k] = sum(I_10yr .- I_now) * pixel_area
+
+        #max_ΔI[k] = maximum(abs.(I_10yr .- I_now))
+
     if k % report_every == 0
         elapsed = time() - t_start
         eta     = elapsed / k * (N_steps - k)
@@ -168,9 +216,14 @@ for k in 1:N_steps
 end
 @printf("Finished in %.1f s\n", time() - t_start)
 
-i_peak = argmax(max_ΔI)
-@printf("Peak max|ΔI| = %.4e  at %.4f Rs from caustic\n",
-        max_ΔI[i_peak], t_vals[i_peak] / Rs)
+abs_int_ΔFlux = abs.(int_ΔFlux)
+i_peak = argmax(abs_int_ΔFlux)
+@printf("Peak |ΔFlux| = %.4e arcsec²  at %.4f Rs from caustic\n",
+        abs_int_ΔFlux[i_peak], t_vals[i_peak] / Rs)
+
+    # i_peak = argmax(max_ΔI)
+    # @printf("Peak max|ΔI| = %.4e  at %.4f Rs from caustic\n",
+    #         max_ΔI[i_peak], t_vals[i_peak] / Rs)
 
 # ── Result plots ──────────────────────────────────────────────────────────────
 pos_Rs = collect(t_vals) ./ Rs   # +HALF_SPAN_RS (outside) … -HALF_SPAN_RS (inside)
@@ -189,13 +242,26 @@ scatter!(p_path, first.(β_path), last.(β_path);
          ms=2, color=:steelblue, markerstrokewidth=0)
 scatter!(p_path, [β_cross[1]], [β_cross[2]]; ms=6, color=:red, markershape=:xcross)
 
-# Panel 2: max|ΔI| vs source position
-p_diff = plot(pos_Rs, max_ΔI; lw=1.5, color=:steelblue, legend=false,
+    # # Panel 2: max|ΔI| vs source position
+    # p_diff = plot(pos_Rs, max_ΔI; lw=1.5, color=:steelblue, legend=false,
+    #     xlabel="Source position relative to fold caustic [Rs]",
+    #     ylabel="max |ΔI|  (10-yr baseline)",
+    #     title="Max intensity change per 10-yr drift vs source position",
+    #     xlims=(-HALF_SPAN_RS, HALF_SPAN_RS) )   # fix: pin axis to the scanned ±HALF_SPAN_RS range
+    # vline!(p_diff, [0.0]; color=:red, ls=:dash, lw=1.5)
+
+
+    # Panel 2: signed integrated ΔFlux vs source position
+# Plotting the *signed* curve preserves the physical sense of the caustic crossing
+# (net flux rises then falls, or vice versa). The red dashed zero-line makes the
+# sign flip at the caustic immediately visible.
+p_diff = plot(pos_Rs, int_ΔFlux; lw=1.5, color=:steelblue, legend=false,
     xlabel="Source position relative to fold caustic [Rs]",
-    ylabel="max |ΔI|  (10-yr baseline)",
-    title="Max intensity change per 10-yr drift vs source position",
-    xlims=(-HALF_SPAN_RS, HALF_SPAN_RS) )   # fix: pin axis to the scanned ±HALF_SPAN_RS range
-vline!(p_diff, [0.0]; color=:red, ls=:dash, lw=1.5)
+    ylabel="Integrated ΔFlux  [arcsec²]  (10-yr baseline)",
+    title="Integrated flux change per 10-yr drift vs source position",
+    xlims=(-HALF_SPAN_RS, HALF_SPAN_RS))
+hline!(p_diff, [0.0]; color=:black, ls=:dot, lw=1.0)   # zero reference
+vline!(p_diff, [0.0]; color=:red,   ls=:dash, lw=1.5)  # caustic position
 
 
 plt = plot(p_path, p_diff;
@@ -206,4 +272,3 @@ plt = plot(p_path, p_diff;
 outpath = joinpath(@__DIR__, "..", "plots", "fold_caustic_intensity_scan_zoom_n2.png")
 savefig(plt, outpath)
 @printf("Saved → %s\n", outpath)
-plt
